@@ -367,7 +367,7 @@ class RSAttack():
                         x_best[idx_to_fool[idx_improved]] = x_new[idx_improved].clone()
                         t = b_curr[idx_improved].clone()
                         te = be_curr[idx_improved].clone()
-                        
+                        # breakpoint()
                         if nimpr > 1:
                             t[:, ind_p] = be_curr[idx_improved][:, ind_np] + 0
                             te[:, ind_np] = b_curr[idx_improved][:, ind_p] + 0

@@ -1,4 +1,6 @@
 import torch
+import argparse
+import json
 # PATHING
 import os
 import sys
@@ -7,9 +9,11 @@ sys.path.append(root)
 # local imports
 from utils.lin.adv import adv_trainer
 
-def main():
-    # SETUP #
-    # check cuda
+
+def setup(args):
+    '''
+    cuda setup, as well as saving of path and variables needed
+    '''
     if torch.cuda.is_available():
         device = torch.device('cuda:0')
     else:
@@ -18,6 +22,23 @@ def main():
     torch.cuda.empty_cache()
     # os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
     # torch.backends.cudnn.benchmark = True
+
+    out_dir = os.join(args.out_dir,args.name)
+    if not os.path.isdir(out_dir): os.mkdir(out_dir)
+    
+    setup_path = os.join(out_dir,'setup.json')
+    with open(setup_path, 'w') as f:
+        json.dump(vars(args),f)
+
+    return
+
+def main(args):
+    # SETUP #
+    # check cuda
+    setup(args)
+    breakpoint()
+
+
 
     k = 10 # if k=0 the network will use the regular FC net
     perturb = 10
@@ -39,7 +60,43 @@ def main():
     trainer.run()
 
 if __name__ == '__main__':
-    main()
+
+    parser = argparse.ArgumentParser()
+    
+    # Algorithm Name
+    parser.add_argument(
+        "--arch",
+        type=str,
+        default='fc',
+        help="name of architecture to use, either cnn or fc",
+    )
+
+    # experiment name for saving models
+    parser.add_argument(
+        "--name",
+        type=str,
+        default='test',
+        help="name of the experiment directory to save results to",
+    )
+
+    # name of dataset
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default='MNIST',
+        help="dataset to use, either MNIST or CIFAR",
+    )
+
+    parser.add_argument(
+        "--out_dir",
+        type=str,
+        default='new_trained',
+        help="directory to save results into",
+    )
+
+    args = parser.parse_args()
+
+    main(args)
 
 
 
