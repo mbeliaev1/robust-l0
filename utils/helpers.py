@@ -118,42 +118,26 @@ class fast_trunc(nn.Module):
 
     def forward(self,x):
         # compute regular linear layer output, but save copy of x
-        x_vals = x.clone().detach()
+        x_vals = x.clone().detach() 
+        # x_vals = [bs, in_features]
         x = torch.matmul(x,self.weight.T)
+        # x = [bs, out_features]
         temp = x_vals.view(-1,1,784)*self.weight
-        # temp shape is (bs, out_dim, in_dim)
+        # temp = [bs, out_features, in_features] 
+        # for x in bs, out_features element wise prod. of w and x
         val_1, _ = torch.topk(temp,self.k)
         val_2, _ = torch.topk(-1*temp,self.k)
         # val shapes are (bs, out_dim, self.k)
         x -= val_1.sum(axis=-1)
         x += val_2.sum(axis=-1)
         x += self.bias
-
-        ####
-        # MORE EFFICIENT IMPLEMENTATION WAS UPDATED AFTER REPORT,
-        # IT IS IDENTICAL TO THE BELOW ORIGINAL IMPLEMENTAION, 
-        # BUT IF ANY ERROR OCCURS FEEL FREE TO REVERT BACK BY COMMENTING 
-        # LINES 121-130, and UNCOMMENTING LINES 140-149. The speedup is roughly 
-        # 30%.
-        ####
-
-        # OLD IMPLEMENTATION BEGINS
-        # x_vals = x.clone().detach()
-        # x = torch.matmul(x,self.weight.T)
-        # # iterate over the result to apply truncation after
-        # for i in range(x.shape[0]):
-        #     temp = x_vals[i,:]*self.weight
-        #     val_1, _ = torch.topk(temp,self.k)
-        #     val_2, _ = torch.topk(-1*temp,self.k)
-        #     x[i] -= torch.sum(val_1,dim=1)
-        #     x[i] += torch.sum(val_2,dim=1)
-        # x += self.bias
-        # OLD IMPLEMENTATION ENDS
-        
+                
         return x
 
 def trunc(x,k):
     '''
+    THIS FUNCTION IS USED FOR ROBUST_VGG (CNN)
+    
     Takes input x, and removes the top and bottom k features by
     zeroing them. 
     Inputs:

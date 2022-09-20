@@ -12,6 +12,7 @@ import pickle
 from utils.lin.sparse_rs import RSAttack
 from utils.lin.models import *
 from utils.helpers import *
+import os
 
 class adv_trainer():
     def __init__(self,
@@ -70,7 +71,6 @@ class adv_trainer():
         self.net_path = self.save_path+'net.pth'
         self.results_str = []
         pickle.dump(self.results_str, open(self.save_path+'results.p','wb'))
-        
         # prep the network
         if k == 0:
             self.net = L_Net().to(self.device)
@@ -102,6 +102,7 @@ class adv_trainer():
                 loss.backward()
                 self.optimizer.step()
                 running_loss += loss.item()
+                # torch.cuda.empty_cache()
             torch.save(self.net.state_dict(), self.net_path)
     
     def test(self):

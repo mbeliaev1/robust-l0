@@ -8,11 +8,16 @@ sys.path.append(root)
 from utils.conv.adv import adv_trainer
 
 def main():
+    # SETUP #
     # check cuda
     if torch.cuda.is_available():
         device = torch.device('cuda:0')
     else:
         device = torch.device('cpu')
+    torch.cuda.synchronize()
+    torch.cuda.empty_cache()
+    # os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+    # torch.backends.cudnn.benchmark = True
         
     k = 10 # if k=0 the network will use the regular VGG net
     perturb = 10

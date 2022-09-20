@@ -1,7 +1,7 @@
 # Truncation as a Defense for Sparse Attacks
-This directory is supplementary material for our work presented at 2022 IEEE International Symposium on Information Theory: 
+This directory is supplementary material for our work presented at "": 
 
-[Efficient and Robust Classification for Sparse Attacks](https://arxiv.org/abs/2201.09369) Mark Beliaev, Payam Delgosha, Hamed Hassani, Ramtin Pedarsani.
+[Paper Title](google.com) Authors, , .s
 
 All relevant citations for methods used are found in the paper's list of references.
 
@@ -39,15 +39,14 @@ We recommend using pacakge manager [pip](https://pip.pypa.io/en/stable/) as well
 - foolbox-2.4.0 [foolbox](https://foolbox.readthedocs.io/en/v2.4.0/)
 - tqdm [tqdm](https://tqdm.github.io/)
 
-### (2) Using .yml file
-Download the [anaconda](https://www.anaconda.com/products/individual) distribution package and run:
-```console
-conda env create -f environment.yml
-```
-
-Following this, activate the environemtn with:
-```console
-conda activate trunc_min
+```bash
+conda create -n robust python==3.8.5
+conda activate trunc
+conda install pytorch==1.7.1 torchvision==0.8.2 torchaudio==0.7.2 cudatoolkit=11.0 -c pytorch
+# test that torch was installed properly
+python torch_test.py
+conda install jupyter # optional
+pip install foolbox==2.4.0 tqdm
 ```
 
 ## II. Contents
@@ -92,6 +91,7 @@ All required code to perform our experiments, including the LICENSE file for spa
 
 In addition to this, the **helpers.py** file contains helper functions utilized throughout our code. Specifically this file contains the custom truncation module used for FC networks, and the truncation function used for convolution networks.
 ## III. Training from scratch
+
 ### K-truncated Fully Connected Networks
 To retrain the network and save to **/new_trained/lin/test/** run:
 ```console
@@ -109,7 +109,7 @@ python train/conv/train.py
 ```
 This trains using the setup from Table 2, letting k=10 and t=300. Each training epoch takes 32-33 it/s on an RTX 3080. You can change the settings accordingly in the given file as basic documentation and comments are provided in the **/utils/conv/** folder and the **/utils/helpers.py** file.
 
-To compare with the regular FC network with k=0 change 'k=10' to 'k=0' on **line 17** of **/train/conv/train.py**. Each training epoch takes 13-14 it/s on an RTX 3080. 
+To compare with the regular VGG network with k=0 change 'k=10' to 'k=0' on **line 17** of **/train/conv/train.py**. Each training epoch takes 13-14 it/s on an RTX 3080. 
 
 ## IV. Evaluating results
 We have provided pretrained models corresponding to the main results from Tables 1-3. The FC nets are found in **/pre_trained/lin/** where **og** and **rob** are the parent directory names for $F^{(0)}$ and $F^{(10)}$ respectively. You can read about the contents of these folders from the adversarial training class found in **/utils/lin/adv.py**. Here we will show how to validate the results for sparse-rs and the pointwise attack using just the model weights of the final networks stored in **net.pth**. 

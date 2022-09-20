@@ -7,17 +7,23 @@ sys.path.append(root)
 # local imports
 from utils.lin.adv import adv_trainer
 
-# check cuda
-if torch.cuda.is_available():
-    device = torch.device('cuda:0')
-else:
-    device = torch.device('cpu')
-
 def main():
-    k = 10 # if k=0 the network will use the regular VGG net
+    # SETUP #
+    # check cuda
+    if torch.cuda.is_available():
+        device = torch.device('cuda:0')
+    else:
+        device = torch.device('cpu')
+    torch.cuda.synchronize()
+    torch.cuda.empty_cache()
+    # os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+    # torch.backends.cudnn.benchmark = True
+
+    k = 10 # if k=0 the network will use the regular FC net
     perturb = 10
     save_dir = '/new_trained/lin/test/'
     os.mkdir(root+save_dir)
+    print(device)
     trainer = adv_trainer(
                 root = root, 
                 k = k,
