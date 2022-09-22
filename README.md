@@ -41,11 +41,10 @@ We recommend using pacakge manager [pip](https://pip.pypa.io/en/stable/) as well
 
 ```bash
 conda create -n robust python==3.8.5
-conda activate trunc
+conda activate robust
 conda install pytorch==1.7.1 torchvision==0.8.2 torchaudio==0.7.2 cudatoolkit=11.0 -c pytorch
-# test that torch was installed properly
 python torch_test.py
-conda install jupyter # optional
+conda install jupyter 
 pip install foolbox==2.4.0 tqdm
 ```
 
@@ -55,126 +54,69 @@ pip install foolbox==2.4.0 tqdm
 
 The MNIST and CIFAR datasets will be downloaded and stored here if they are not already present when one runs **train/lin/train.py** or **train/conv/train.py** for the first time. 
 
-**eval/**
-
-Scripts for evaluating the results of the pretrained/new models. Within the folder there are subdirectories for the experiments regarding FC networks **eval/lin/** and convolution networks **eval/conv/**. Each subdirectory has the same three files: 
-
-(1) **acc.py**: Tests the clean accuracy of the specified network. 
-
-(2) **rs.py**: Tests the robust accuracy using sparse-rs.
-
-(3) **pointwise.py**: Tests median adversarial attack magnitude using the pointwise attack for both beta=100 and beta=1.
-
 Each of the three files requires an additional arguement when executing in the terminal: the path of the parent directory for the network we want to test. Details of how to use these files with the provided pre_trained models to validate our results is given in [IV. Evaluating results](#iv.-evaluating-results).
 
 **new_trained/**
 
-Empty folder structure for storing the results of new adversarially trained networks. Contains seperate directories for linear and convolution models.
+Empty folder structure for storing the results of new adversarially trained networks. Structure of results saved is found in **scripts/train.py**. 
 
-**pre_trained/**
+**scripts/**
 
-Same structure as **new_trained/**, but already contains the results for the networks used in our experiments. For details on the contents of the results, see the corresponding **adv.py** files found in **utils/conv/** **utils/lin/**. Due to the restriction in space, we did not add the model weights for the convolution networks, although the code to retrain them is provided, and the results are still there. We plan to upload these weights publically after the paper has been reviewed.
-
-**train/**
-
-Scripts for training models from scratch, as of now they are set up to replicate the models from our experiments.
+Scripts for training and evaluating models. Usage found in sections [III. Training from scratch](#iii.-training-from-scratch) and [IV. Evaluating results](#iv.-evaluating-results).
 
 **utils/**
 
-All required code to perform our experiments, including the LICENSE file for sparse-rs. Within the folder there are subdirectories for the experiments regarding FC networks **utils/lin/** and convolution networks **utils/conv/**. Each subdirectory has the same three files: 
+All required code to perform our experiments, including the LICENSE file for sparse-rs.
 
 (1) **adv.py**: Contains the general adversarial training class used for our experiments.  
 
 (2) **models.py**: Contains all the models we used for our experiments.
 
-(3) **sparse_rs.py**: Contains the sparse-rs class that is used to attack our networks in **adv.py**. This file is specific for convolution and linear models because our MNIST image data does not have channels like CIFAR and hence the original sprase-rs code was slightly edited (see line 325 for comments regarding this). The license corresponding to the originally used sparse-rs code is provided in the **utils/** folder.
+(3) **sparse_rs.py**: Contains the sparse-rs class that is used to attack our networks in **adv.py**. This file is different from the original version as we use the MNIST dataset ontop of CIFAR, and change variables based on which experiment is being performed. The license corresponding to the originally used sparse-rs code is provided in the **utils/** folder.
 
-In addition to this, the **helpers.py** file contains helper functions utilized throughout our code. Specifically this file contains the custom truncation module used for FC networks, and the truncation function used for convolution networks.
+(4) **helpers.py**: Contains helper functions utilized throughout our code. Specifically this file contains the custom truncation module used for FC networks, and the truncation function used for convolution networks.
+
 ## III. Training from scratch
 
-### K-truncated Fully Connected Networks
-To retrain the network and save to **/new_trained/lin/test/** run:
+We will briefly cover the details of the training and evaluation scripts found in **scripts/**, setting the parameters for epochs, queries, and iterations to arbitrary numbers that generate the results quickly. For full evaluation and training as done in the paper experiments, in most cases you should use the default paramters, but we urge you to check the paper for specific configurations.
+
+To train the FC network with truncation parameter k=10 and save to **/new_trained/test/**:
+
 ```console
-python train/lin/train.py 
+python scripts/train.py --arch fc --k 10 --perturb 10 --seed 99 --epochs 2 --queries 10 --iters 2 
 ```
 
-This trains using the setup from Table 1, letting k=10 and t=300. Each training epoch takes 29-30 it/s on an RTX 3080. You can change the settings accordingly in the given file as documentation is provided in the **/utils/lin/** folder and helpers folder.
+Each training epoch takes 29-30 it/s on an RTX 3080. Note that the computational bottleneck here is the adversarial component, hence we set number of queries (t) to 10. A corresponding directory will be created at **/new_trained/test/fc_k10_p10_seed99** with the model and sparse rs log. 
 
-To compare with the regular FC network with k=0 change 'k=10' to 'k=0' on **line 17** of **/train/lin/train.py**. Each training epoch takes 0.5 it/s on an RTX 3080. This will result in an arbitrary robust accuracy of 0%, as the attack is able to fool the classifier on the entire testset regardless of adversarial training. 
+To remove the truncation parameter and use the default FC network, simply set k to zero:
 
-### K-truncated Convolution Networks (VGG-19)
-For the convolution networks, the results will be saved to  **/new_trained/conv/test/**. Perform the experiments by running:
 ```console
-python train/conv/train.py 
+python scripts/train.py --arch fc --k 0 --perturb 10 --seed 99 --epochs 2 --queries 10 --iters 2 
 ```
-This trains using the setup from Table 2, letting k=10 and t=300. Each training epoch takes 32-33 it/s on an RTX 3080. You can change the settings accordingly in the given file as basic documentation and comments are provided in the **/utils/conv/** folder and the **/utils/helpers.py** file.
 
-To compare with the regular VGG network with k=0 change 'k=10' to 'k=0' on **line 17** of **/train/conv/train.py**. Each training epoch takes 13-14 it/s on an RTX 3080. 
+For the convolution networks with truncation components attached to the VGG architecture:
+
+```console
+python scripts/train.py --arch cnn --k 10 --perturb 10 --seed 99 --epochs 2 --queries 10 --iters 2
+```
+
+This trains using the setup from Table 2, letting k=10 and t=300. Each training epoch takes 32-33 it/s on an RTX 3080. A corresponding directory will be created at **/new_trained/test/cnn_k10_p10_seed99** with the model and sparse rs log.
+
+Once again, to remove the truncation parameter, simply set k to zero:
+
+```console
+python scripts/train.py --arch cnn --k 0 --perturb 10 --seed 99 --epochs 2 --queries 10 --iters 2
+```
 
 ## IV. Evaluating results
-We have provided pretrained models corresponding to the main results from Tables 1-3. The FC nets are found in **/pre_trained/lin/** where **og** and **rob** are the parent directory names for $F^{(0)}$ and $F^{(10)}$ respectively. You can read about the contents of these folders from the adversarial training class found in **/utils/lin/adv.py**. Here we will show how to validate the results for sparse-rs and the pointwise attack using just the model weights of the final networks stored in **net.pth**. 
 
-The same can be done for the convolution models $VGG^{(0)}$ and $VGG^{(10)}$ attacks by simply replacing **lin** with **conv** for all the following instructions. Note though that we left the model weights out as each file is roughly 80MB, making it hard to fit within the 100MB limit of the supplementary material. We leave the instructions here as we plan to release the weights publically once the anonymous review process is finished. 
+To evaluate a particular network, use the script **scripts/eval.py** and set the corresponding arguements. For example, we can evaluate all 4 networks we just trained, measuring their accuracy, robust accuracy with sparseRS, and median adversarial attack magnitude wit the pointwise attack:
 
-### Clean accuracy
-To test the clean accuracy of the non truncated FC network $F^{(0)}$ run:
 ```console
-python eval/lin/acc.py pre_trained/lin/og/
-```
-for $F^{(10)}$ you just change the path accordingly:
-```console
-python eval/lin/acc.py pre_trained/lin/rob/
-```
-and for the conv models, you change the folder path AND the file path:
-```console
-python eval/conv/acc.py pre_trained/conv/og/
+python scripts/eval.py --mode all --exp test --name fc_k10_p10_seed99 --perturb 10 --queries 10
+python scripts/eval.py --mode all --exp test --name fc_k0_p10_seed99 --perturb 10 --queries 10
+python scripts/eval.py --mode all --exp test --name cnn_k10_p10_seed99 --perturb 10 --queries 10
+python scripts/eval.py --mode all --exp test --name cnn_k0_p10_seed99 --perturb 10 --queries 10
 ```
 
-We keep this sort of structure for the other tests as well, and hence will mostly show how to perform them on $F^{(0)}$. 
-
-### Robust accuracy (sparse-rs)
-To run the sparse-rs attack on $F^{(0)}$ run:
-```console
-python eval/lin/rs.py pre_trained/lin/og/ [a] [b] [c] [d] 
-```
-[a] - number of queries, or time budget of the attack (default: 300)  
-
-[b] - beta value (default: 100)
-
-[c] - l_0 budget (default: 10)
-
-[d] - how many batches of MNIST to use (MAX: 39) (default: 39)
-
-
-Hence if one wanted to check the results with a longer attack of **time budget 10,000**, **beta value of 10**, **l_0 budget of 5** but only on **one batch** of 256 images from the MNIST test set they would run:
-```console
-python eval/lin/rs.py pre_trained/lin/og/ 10000 10 5 1
-```
-The final accuracy will be pritned, and a temporary log file **log_temp.txt** will be created in **pre_trained/lin/og/** describing the attack. 
-If then one wanted to confirm this on the k-truncated network $F^{(10)}$, the command would be:
-```console
-python eval/lin/rs.py pre_trained/lin/rob/ 10000 10 5 1
-```
-
-Note all the options can be left blank and the default reults would be calculated.
-
-### Median adversary attack magnitude (Pointwise Attack)
-To run the Pointwise Attack on $F^{(0)}$ for BOTH beta=100 and beta=1 as in Table 2 run:
-```console
-python eval/lin/pointwise.py pre_trained/lin/og/ [a] [b] [c] 
-```
-[a] - batch size (default: 64)
-
-[b] - num batches to calculate on (default: 16)
-
-[c] - number of iterations to re run the attack for (default: 10)
-
-The output would first show the result for Beta=1, where the adversarial images generated are only allowed to be within the original domain, and then for Beta=100. 
-
-One can do as before by chaging the corresponding file and directory paths to check the results for the VGG networks, as well as the robust FC network.
-
-For example, to perform a quick attack on **1 batch** of **4 images** using **10 iterations** on the robust convolution network $VGG^{(10)}$
-```console
-python eval/conv/pointwise.py pre_trained/conv/rob/ 4 1 10
-```
-# trunc
+Note that the experiment configuarion is loaded using the --name arguement using the corresponding json file in that directory. This time, the arguement perturb controls the l0 magnitude of the attack for testing robust accuracy, whereas in **scripts/train.py** it controlled the magnitude of the attack in the adversarial training component. Note that using --all performs all three tests and saves them as **acc.p**, **rs.p** and **pw.p** within the expirement directory.

@@ -1,4 +1,3 @@
-from tkinter import E
 import torch
 import argparse
 import json
@@ -8,7 +7,7 @@ import sys
 root = os.path.abspath(os.curdir)
 sys.path.append(root)
 # local imports
-from utils.lin.adv import adv_trainer
+from utils.adv import adv_trainer
 
 
 def setup(args):
@@ -16,6 +15,7 @@ def setup(args):
     cuda setup, as well as saving of path and variables needed
     '''
     # INIT CUDA #
+    #-------------------------------------------------------------------------------------#
     if torch.cuda.is_available():
         device = torch.device('cuda:0')
     else:
@@ -25,10 +25,15 @@ def setup(args):
     # os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
     # torch.backends.cudnn.benchmark = True
 
-    # CHECK INPUT #
+    # CHECK INPUTS #
+    #-------------------------------------------------------------------------------------#
     assert args.arch in ['fc','cnn'], "Unsupported architecture chosen: %s"%args.arch
+    # if bs was not set manually, use default
+    if args.bs is None:
+        args.bs = 128*(args.arch == 'cnn') + 256*(args.arch == 'fc')
 
     # CREATE DIRS #
+    #-------------------------------------------------------------------------------------#
     exp_name = '%s_k%d_p%d_seed%d'%(args.arch,args.k,args.perturb,args.seed)
     exp_dir = os.path.join(args.out_dir,args.exp,exp_name)
 
@@ -56,7 +61,8 @@ def main(args):
         print('\t', key,': ', vars(args)[key])
 
     trainer = adv_trainer(
-                root = root, 
+                root = root,
+                arch = args.arch, 
                 k = args.k,
                 perturb = args.perturb,
                 beta = args.beta,
@@ -131,8 +137,8 @@ if __name__ == '__main__':
     parser.add_argument(
         "--bs",
         type=int,
-        default=256,
-        help="batchsize of NN",
+        default=None,
+        help="batchsize of NN, note default is set dependent on net architecture",
     )
 
     parser.add_argument(
@@ -157,7 +163,6 @@ if __name__ == '__main__':
     )
 
     args = parser.parse_args()
-
     main(args)
 
 

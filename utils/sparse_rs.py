@@ -47,6 +47,7 @@ class RSAttack():
     
     def __init__(
             self,
+            arch,
             predict,
             norm='L0',
             n_queries=5000,
@@ -68,7 +69,10 @@ class RSAttack():
         """
         Sparse-RS implementation in PyTorch
         """
-        
+        if arch == 'cnn':
+            self.color_set = 3
+        else:
+            self.color_set = 1
         self.predict = predict
         self.norm = norm
         self.n_queries = n_queries
@@ -92,14 +96,9 @@ class RSAttack():
         """
         :param y:        correct labels if untargeted else target labels
         """
-
-        logits = self.predict(x)
-        
         # breakpoint()
-        # I CAHNGED THIS # 
-        # print('shapes: ',logits.shape, y.shape)
-        # print(F.cross_entropy(logits, y, reduction='none'))
-        # print('shape bef: ',logits.shape)
+        logits = self.predict(x)
+
         if logits.dim() == 1:
             logits.unsqueeze_(dim=0)
         ## CHANGE ENDS HERE
@@ -108,9 +107,6 @@ class RSAttack():
         u = torch.arange(x.shape[0])
         y_corr = logits[u, y].clone()
         logits[u, y] = -float('inf')
-        # print('val:',logits)
-        # print('right before',logits.shape)
-        # print('max value',logits.max(dim=-1)[0])
 
         y_others = logits.max(dim=-1)[0]
 
@@ -337,7 +333,7 @@ class RSAttack():
                             # if update is 1x1 make sure the sampled color is different from the current one
                             old_clr = x_new[img, :, np_set // w, np_set % w].clone()
                             # changed to color shape (3,1) --> 1,1
-                            assert old_clr.shape == (1, 1), print(old_clr.shape,old_clr)
+                            assert old_clr.shape == (self.color_set, 1), print(old_clr.shape,old_clr)
                             # assert old_clr.shape == (3, 1), print(old_clr.shape,old_clr)
                             new_clr = old_clr.clone()
                             while (new_clr == old_clr).all().item():
@@ -966,8 +962,14 @@ class RSAttack():
                 # print('-----'*8)
                 # print("SUPER 2 CHECK",min(x_to_fool[0].squeeze()),max(x_to_fool[0].squeeze()))
                 # print('-----'*8)
-                qr_curr, adv_curr = self.attack_single_run(x_to_fool, y_to_fool)
-
+                # BAD FIX NOTE: MARK DID THIS, this will sometimes not work, so doing it over is one way around
+                #-------------------------------------------------------------------------------------------------#
+                try: 
+                    qr_curr, adv_curr = self.attack_single_run(x_to_fool, y_to_fool)
+                except:
+                    print('skipped batch')
+                    break
+                #-------------------------------------------------------------------------------------------------#
                 output_curr = self.predict(adv_curr)
                 if not self.targeted:
                     acc_curr = output_curr.max(1)[1] == y_to_fool

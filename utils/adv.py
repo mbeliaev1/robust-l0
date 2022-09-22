@@ -1,22 +1,20 @@
 # torch imports
-from torch._C import TensorType
+import torch
 import torch.nn as nn
-from torch.serialization import save 
 import torch.optim as optim
 # other modules
 import numpy as np
-import time
 from tqdm import trange
 import pickle
 # internal imports
-from utils.lin.sparse_rs import RSAttack
-from utils.lin.models import *
+from utils.sparse_rs import RSAttack
+from utils.models import *
 from utils.helpers import *
-import os
 
 class adv_trainer():
     def __init__(self,
                 root, 
+                arch,
                 k,
                 perturb,
                 beta,
@@ -33,6 +31,7 @@ class adv_trainer():
         
         Inputs:
             root        - location of parent directory for the library
+            arch        - string determining the architecture to use for the model
             k           - truncation param.
             perturb     - l_0 budget for sparse_rs
             beta        - l_inf norm parameter (scales image domain)
@@ -55,6 +54,7 @@ class adv_trainer():
         super(adv_trainer, self).__init__()
         # init params
         self.root = root
+        self.arch = arch
         self.k = k
         self.perturb = perturb
         self.beta = beta
@@ -71,36 +71,51 @@ class adv_trainer():
         self.net_path = self.save_path+'net.pth'
         self.results_str = []
         pickle.dump(self.results_str, open(self.save_path+'results.p','wb'))
-        # prep the network
-        if k == 0:
-            self.net = L_Net().to(self.device)
-            self.eval_net = L_Net_eval(self.mu,self.sigma).to(self.device)
-        else:
-            self.net = r_L_Net(self.k).to(self.device)
-            self.eval_net = r_L_Net_eval(self.k, self.mu,self.sigma).to(self.device)
+
+        # prep the network based on k and arch
+        if arch == 'fc':
+            if k == 0:
+                self.net = L_Net().to(self.device)
+                self.eval_net = L_Net_eval(self.mu,self.sigma).to(self.device)
+            else:   
+                self.net = r_L_Net(self.k).to(self.device)
+                self.eval_net = r_L_Net_eval(self.k, self.mu,self.sigma).to(self.device)
+
+            self.lrs = 0.001*np.ones(self.num_iters)
+            self.Data = prep_MNIST(self.root, bs)
+
+        elif arch == 'cnn':
+            if k == 0:
+                self.net = VGG().to(self.device)
+                self.eval_net = VGG_eval(self.mu,self.sigma).to(self.device)
+            else:
+                self.net = rob_VGG(self.k).to(self.device)
+                self.eval_net = rob_VGG_eval(self.k, self.mu, self.sigma).to(self.device)
+
+            self.lrs = [0.2,0.1,0.05,0.025,0.01,0.005,0.0025,0.001,0.0005,0.00025]
+            self.Data = prep_CIFAR(self.root, self.bs)
+
         torch.save(self.net.state_dict(), self.net_path)
-        # prep the training utils
         self.criterion = nn.CrossEntropyLoss()
-        self.optimizer = optim.SGD(self.net.parameters(), lr=0.001, momentum=0.9)
-        # prep the data
-        self.Data = prep_MNIST(self.root, bs)
-    
+
+        
     def train(self):
         '''
         Trains self.net with self.criterion using self.optimizer.
         Performs self.num_epochs passes of the data, saving the weights after.
         '''
+        optimizer = optim.SGD(self.net.parameters(), self.lrs[self.iter], momentum=0.9,weight_decay=5e-4)
         self.net.train()
         for _ in trange(self.num_epochs):  
             running_loss = 0.0
             for inputs, labels in zip(self.Data['x_train'],self.Data['y_train']):
                 inputs = inputs.to(self.device)
                 labels = labels.to(self.device)
-                self.optimizer.zero_grad()
+                optimizer.zero_grad()
                 outputs = self.net(inputs)
                 loss = self.criterion(outputs, labels)
                 loss.backward()
-                self.optimizer.step()
+                optimizer.step()
                 running_loss += loss.item()
                 # torch.cuda.empty_cache()
             torch.save(self.net.state_dict(), self.net_path)
@@ -155,15 +170,16 @@ class adv_trainer():
             num_queries = 5000
             log_path=self.save_path+'log_final.txt'
         # load adversary
-        adversary = RSAttack(self.eval_net,
-                                norm='L0',
-                                eps=self.perturb,
-                                n_queries=num_queries,
-                                n_restarts=1,
-                                seed=self.seed,
-                                device=self.device,
-                                log_path=log_path
-                                )
+        adversary = RSAttack(self.arch,
+                             self.eval_net,
+                             norm='L0',
+                             eps=self.perturb,
+                             n_queries=num_queries,
+                             n_restarts=1,
+                             seed=self.seed,
+                             device=self.device,
+                             log_path=log_path
+                             )
         # attack over defined bathces (1 or all)
         for i in trange(batches):
             x = (self.Data[keys[0]][i].to(self.device)-self.mu)/self.sigma
@@ -186,7 +202,7 @@ class adv_trainer():
                     adv_ys.append(torch.clone(y[ind_to_fool][idx_fooled]))
                 # eval if testing
                 elif test:
-                    all_acc.append(r_acc.float().mean()*100)
+                    all_acc.append(r_acc.float().sum().cpu().numpy()/len(pred))
         if train:
             return adv_xs, adv_ys
         elif test:
@@ -247,7 +263,7 @@ class adv_trainer():
             print(res_str)
             self.results_str.append(res_str)
 
-            if self.num_iters != 1:
+            if self.iter < self.num_iters-1:
                 old, new = self.attack_save()
                 res_str = "Went from %d batches to %d batches after attack"%(old, new)
                 print(res_str)
