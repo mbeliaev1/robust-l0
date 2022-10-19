@@ -4,6 +4,7 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 #
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -16,10 +17,36 @@ import torch.nn.functional as F
 
 import numpy as np
 import copy
-from utils.helpers import Logger
+import sys
+# from utils.helpers import Logger
 import os
 
+# Two Helper Functions 
+class Logger():
+    def __init__(self, log_path):
+        self.log_path = log_path
 
+    def log(self, str_to_log):
+        # print(str_to_log)
+        if not self.log_path is None:
+            with open(self.log_path, 'a') as f:
+                f.write(str_to_log + '\n')
+                f.flush()
+
+
+class SingleChannelModel():
+    """ reshapes images to rgb before classification
+        i.e. [N, 1, H, W x 3] -> [N, 3, H, W]
+    """
+    def __init__(self, model):
+        if isinstance(model, nn.Module):
+            assert not model.training
+        self.model = model
+
+    def __call__(self, x):
+        return self.model(x.view(x.shape[0], 3, x.shape[2], x.shape[3] // 3))
+
+######
 class RSAttack():
     """
     Sparse-RS attacks
@@ -47,7 +74,6 @@ class RSAttack():
     
     def __init__(
             self,
-            arch,
             predict,
             norm='L0',
             n_queries=5000,
@@ -69,10 +95,7 @@ class RSAttack():
         """
         Sparse-RS implementation in PyTorch
         """
-        if arch == 'cnn':
-            self.color_set = 3
-        else:
-            self.color_set = 1
+        
         self.predict = predict
         self.norm = norm
         self.n_queries = n_queries
@@ -91,23 +114,18 @@ class RSAttack():
         self.resample_loc = n_queries // 10 if resample_loc is None else resample_loc
         self.data_loader = data_loader
         self.update_loc_period = update_loc_period if not update_loc_period is None else 4 if not targeted else 10
+        
     
     def margin_and_loss(self, x, y):
         """
         :param y:        correct labels if untargeted else target labels
         """
-        # breakpoint()
-        logits = self.predict(x)
 
-        if logits.dim() == 1:
-            logits.unsqueeze_(dim=0)
-        ## CHANGE ENDS HERE
-        # print('shape aft: ',logits.shape)
+        logits = self.predict(x)
         xent = F.cross_entropy(logits, y, reduction='none')
         u = torch.arange(x.shape[0])
         y_corr = logits[u, y].clone()
         logits[u, y] = -float('inf')
-
         y_others = logits.max(dim=-1)[0]
 
         if not self.targeted:
@@ -268,11 +286,6 @@ class RSAttack():
         return patch_univ.clamp(0., 1.)
     
     def attack_single_run(self, x, y):
-        ### INITIAL DATA CHECK ###
-        # print('-----'*8)
-        # print('INITAL X',min(x[0].squeeze()),max(x[0].squeeze()))
-
-        # print('-----'*8)
         with torch.no_grad():
             adv = x.clone()
             c, h, w = x.shape[1:]
@@ -286,7 +299,6 @@ class RSAttack():
                 n_pixels = h * w
                 b_all, be_all = torch.zeros([x.shape[0], eps]).long(), torch.zeros([x.shape[0], n_pixels - eps]).long()
                 for img in range(x.shape[0]):
-                    # print('randperm')
                     ind_all = torch.randperm(n_pixels)
                     ind_p = ind_all[:eps]
                     ind_np = ind_all[eps:]
@@ -298,17 +310,14 @@ class RSAttack():
                 n_queries = torch.ones(x.shape[0]).to(self.device)
                 
                 for it in range(1, self.n_queries):
-                    # print(it,self.n_queries)
-                    # print(x.shape)
                     # check points still to fool
-                    idx_to_fool = (margin_min > 0.).nonzero(as_tuple=False).squeeze()
+                    idx_to_fool = (margin_min > 0.).nonzero().squeeze()
                     x_curr = self.check_shape(x[idx_to_fool])
                     x_best_curr = self.check_shape(x_best[idx_to_fool])
                     y_curr = y[idx_to_fool]
                     margin_min_curr = margin_min[idx_to_fool]
                     loss_min_curr = loss_min[idx_to_fool]
                     b_curr, be_curr = b_all[idx_to_fool], be_all[idx_to_fool]
-                    # print(b_curr.shape,be_curr.shape,'inside 1')
                     if len(y_curr.shape) == 0:
                         y_curr.unsqueeze_(0)
                         margin_min_curr.unsqueeze_(0)
@@ -332,38 +341,31 @@ class RSAttack():
                         else:
                             # if update is 1x1 make sure the sampled color is different from the current one
                             old_clr = x_new[img, :, np_set // w, np_set % w].clone()
-                            # changed to color shape (3,1) --> 1,1
-                            assert old_clr.shape == (self.color_set, 1), print(old_clr.shape,old_clr)
-                            # assert old_clr.shape == (3, 1), print(old_clr.shape,old_clr)
+                            assert old_clr.shape == (c, 1), print(old_clr)
                             new_clr = old_clr.clone()
                             while (new_clr == old_clr).all().item():
-                                new_clr = self.random_choice([1, 1]).clone().clamp(0., 1.)
+                                new_clr = self.random_choice([c, 1]).clone().clamp(0., 1.)
                             x_new[img, :, np_set // w, np_set % w] = new_clr.clone()
-                    #############################################################
-                    # Check exactly what is happening here with the image   
-                    # print(min(x_new[0].squeeze()),max(x_new[0].squeeze()),it, 'x_new') 
-                    # print(min(x_curr[0].squeeze()),max(x_curr[0].squeeze()),it, 'x_curr')
-                    # print(min(x_best_curr[0].squeeze()),max(x_best_curr[0].squeeze()),it, 'x_best_curr')   
-                    #############################################################     
+                        
                     # compute loss of the new candidates
                     margin, loss = self.margin_and_loss(x_new, y_curr)
                     n_queries[idx_to_fool] += 1
                     
                     # update best solution
                     idx_improved = (loss < loss_min_curr).float()
-                    idx_to_update = (idx_improved > 0.).nonzero(as_tuple=False).squeeze()
+                    idx_to_update = (idx_improved > 0.).nonzero().squeeze()
                     loss_min[idx_to_fool[idx_to_update]] = loss[idx_to_update]
         
                     idx_miscl = (margin < -1e-6).float()
                     idx_improved = torch.max(idx_improved, idx_miscl)
                     nimpr = idx_improved.sum().item()
                     if nimpr > 0.:
-                        idx_improved = (idx_improved.view(-1) > 0).nonzero(as_tuple=False).squeeze()
+                        idx_improved = (idx_improved.view(-1) > 0).nonzero().squeeze()
                         margin_min[idx_to_fool[idx_improved]] = margin[idx_improved].clone()
                         x_best[idx_to_fool[idx_improved]] = x_new[idx_improved].clone()
                         t = b_curr[idx_improved].clone()
                         te = be_curr[idx_improved].clone()
-                        # breakpoint()
+                        
                         if nimpr > 1:
                             t[:, ind_p] = be_curr[idx_improved][:, ind_np] + 0
                             te[:, ind_np] = b_curr[idx_improved][:, ind_p] + 0
@@ -375,7 +377,7 @@ class RSAttack():
                         be_all[idx_to_fool[idx_improved]] = te.clone()
                     
                     # log results current iteration
-                    ind_succ = (margin_min <= 0.).nonzero(as_tuple=False).squeeze()
+                    ind_succ = (margin_min <= 0.).nonzero().squeeze()
                     if self.verbose and ind_succ.numel() != 0:
                         self.logger.log(' '.join(['{}'.format(it + 1),
                             '- success rate={}/{} ({:.2%})'.format(
@@ -429,7 +431,7 @@ class RSAttack():
         
                 for it in range(1, self.n_queries):
                     # check points still to fool
-                    idx_to_fool = (margin_min > -1e-6).nonzero(as_tuple=False).squeeze()
+                    idx_to_fool = (margin_min > -1e-6).nonzero().squeeze()
                     x_curr = self.check_shape(x[idx_to_fool])
                     patches_curr = self.check_shape(patches_coll[idx_to_fool])
                     y_curr = y[idx_to_fool]
@@ -492,20 +494,20 @@ class RSAttack():
         
                     # update best solution
                     idx_improved = (loss < loss_min_curr).float()
-                    idx_to_update = (idx_improved > 0.).nonzero(as_tuple=False).squeeze()
+                    idx_to_update = (idx_improved > 0.).nonzero().squeeze()
                     loss_min[idx_to_fool[idx_to_update]] = loss[idx_to_update]
         
                     idx_miscl = (margin < -1e-6).float()
                     idx_improved = torch.max(idx_improved, idx_miscl)
                     nimpr = idx_improved.sum().item()
                     if nimpr > 0.:
-                        idx_improved = (idx_improved.view(-1) > 0).nonzero(as_tuple=False).squeeze()
+                        idx_improved = (idx_improved.view(-1) > 0).nonzero().squeeze()
                         margin_min[idx_to_fool[idx_improved]] = margin[idx_improved].clone()
                         patches_coll[idx_to_fool[idx_improved]] = patches_new[idx_improved].clone()
                         loc[idx_to_fool[idx_improved]] = loc_new[idx_improved].clone()
                         
                     # log results current iteration
-                    ind_succ = (margin_min <= 0.).nonzero(as_tuple=False).squeeze()
+                    ind_succ = (margin_min <= 0.).nonzero().squeeze()
                     if self.verbose and ind_succ.numel() != 0:
                         self.logger.log(' '.join(['{}'.format(it + 1),
                             '- success rate={}/{} ({:.2%})'.format(
@@ -664,7 +666,7 @@ class RSAttack():
                 mask[-s:] = 1.
                 mask[:, :s] = 1.
                 mask[:, -s:] = 1.
-                ind = (mask == 1.).nonzero(as_tuple=False).squeeze()
+                ind = (mask == 1.).nonzero().squeeze()
                 eps = ind.shape[0]
                 x_best = x.clone()
                 x_new = x.clone()
@@ -693,7 +695,7 @@ class RSAttack():
         
                 for it in range(1, self.n_queries):
                     # check points still to fool
-                    idx_to_fool = (margin_min > -1e-6).nonzero(as_tuple=False).squeeze()
+                    idx_to_fool = (margin_min > -1e-6).nonzero().squeeze()
                     x_curr = self.check_shape(x[idx_to_fool])
                     x_best_curr = self.check_shape(x_best[idx_to_fool])
                     y_curr = y[idx_to_fool]
@@ -744,19 +746,19 @@ class RSAttack():
         
                     # update best solution
                     idx_improved = (loss < loss_min_curr).float()
-                    idx_to_update = (idx_improved > 0.).nonzero(as_tuple=False).squeeze()
+                    idx_to_update = (idx_improved > 0.).nonzero().squeeze()
                     loss_min[idx_to_fool[idx_to_update]] = loss[idx_to_update]
         
                     idx_miscl = (margin < -1e-6).float()
                     idx_improved = torch.max(idx_improved, idx_miscl)
                     nimpr = idx_improved.sum().item()
                     if nimpr > 0.:
-                        idx_improved = (idx_improved.view(-1) > 0).nonzero(as_tuple=False).squeeze()
+                        idx_improved = (idx_improved.view(-1) > 0).nonzero().squeeze()
                         margin_min[idx_to_fool[idx_improved]] = margin[idx_improved].clone()
                         x_best[idx_to_fool[idx_improved]] = x_new[idx_improved].clone()
                     
                     # log results current iteration
-                    ind_succ = (margin_min <= 0.).nonzero(as_tuple=False).squeeze()
+                    ind_succ = (margin_min <= 0.).nonzero().squeeze()
                     if self.verbose and ind_succ.numel() != 0:
                         self.logger.log(' '.join(['{}'.format(it + 1),
                             '- success rate={}/{} ({:.2%})'.format(
@@ -786,7 +788,7 @@ class RSAttack():
                 mask[-s:] = 1.
                 mask[:, :s] = 1.
                 mask[:, -s:] = 1.
-                ind = (mask == 1.).nonzero(as_tuple=False).squeeze()
+                ind = (mask == 1.).nonzero().squeeze()
                 eps = ind.shape[0]
                 x_best = x.clone()
                 x_new = x.clone()
@@ -915,12 +917,9 @@ class RSAttack():
                             targeted attack -> target labels, if None random classes,
                             different from the predicted ones, are sampled
         """
-        #SUPER INIT CHECK
-        # print('-----'*8)
-        # print("SUPER CHECK",min(x[4].squeeze()),max(x[4].squeeze()))
-        # print('-----'*8)
 
         self.init_hyperparam(x)
+
         adv = x.clone()
         qr = torch.zeros([x.shape[0]]).to(self.device)
         if y is None:
@@ -937,6 +936,7 @@ class RSAttack():
                     y = self.random_target_classes(y_pred, n_classes)
         else:
             y = y.detach().clone().long().to(self.device)
+
         if not self.targeted:
             acc = self.predict(x).max(1)[1] == y
         else:
@@ -947,39 +947,28 @@ class RSAttack():
         torch.random.manual_seed(self.seed)
         torch.cuda.random.manual_seed(self.seed)
         np.random.seed(self.seed)
-        # print('-----'*8)
-        # print("SUPER 1.5 CHECK",min(x[4].squeeze()),max(x[4].squeeze()))
-        # print('-----'*8)
+        
         for counter in range(self.n_restarts):
-            
-
-            ind_to_fool = acc.nonzero(as_tuple=False).squeeze()
+            ind_to_fool = acc.nonzero().squeeze()
             if len(ind_to_fool.shape) == 0:
                 ind_to_fool = ind_to_fool.unsqueeze(0)
             if ind_to_fool.numel() != 0:
                 x_to_fool = x[ind_to_fool].clone()
                 y_to_fool = y[ind_to_fool].clone()
-                # print('-----'*8)
-                # print("SUPER 2 CHECK",min(x_to_fool[0].squeeze()),max(x_to_fool[0].squeeze()))
-                # print('-----'*8)
-                # BAD FIX NOTE: MARK DID THIS, this will sometimes not work, so doing it over is one way around
-                #-------------------------------------------------------------------------------------------------#
-                try: 
-                    qr_curr, adv_curr = self.attack_single_run(x_to_fool, y_to_fool)
-                except:
-                    print('skipped batch')
-                    break
-                #-------------------------------------------------------------------------------------------------#
+
+                qr_curr, adv_curr = self.attack_single_run(x_to_fool, y_to_fool)
+
                 output_curr = self.predict(adv_curr)
                 if not self.targeted:
                     acc_curr = output_curr.max(1)[1] == y_to_fool
                 else:
                     acc_curr = output_curr.max(1)[1] != y_to_fool
-                ind_curr = (acc_curr == 0).nonzero(as_tuple=False).squeeze()
+                ind_curr = (acc_curr == 0).nonzero().squeeze()
 
                 acc[ind_to_fool[ind_curr]] = 0
                 adv[ind_to_fool[ind_curr]] = adv_curr[ind_curr].clone()
                 qr[ind_to_fool[ind_curr]] = qr_curr[ind_curr].clone()
+                # NOTE: Mark edited this out
                 # if self.verbose:
                 #     print('restart {} - robust accuracy: {:.2%}'.format(
                 #         counter, acc.float().mean()),

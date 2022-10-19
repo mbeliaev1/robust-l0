@@ -44,7 +44,7 @@ conda create -n robust python==3.8.5
 conda activate robust
 conda install pytorch==1.7.1 torchvision==0.8.2 torchaudio==0.7.2 cudatoolkit=11.0 -c pytorch
 python torch_test.py
-conda install jupyter 
+conda install jupyter
 pip install foolbox==2.4.0 tqdm
 ```
 

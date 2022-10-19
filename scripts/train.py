@@ -1,3 +1,4 @@
+from xmlrpc.client import boolean
 import torch
 import argparse
 import json
@@ -7,7 +8,7 @@ import sys
 root = os.path.abspath(os.curdir)
 sys.path.append(root)
 # local imports
-from utils.adv import adv_trainer
+from utils.adv_trainer import adv_trainer
 
 
 def setup(args):
@@ -16,21 +17,18 @@ def setup(args):
     '''
     # INIT CUDA #
     #-------------------------------------------------------------------------------------#
-    if torch.cuda.is_available():
-        device = torch.device('cuda:0')
+    if torch.cuda.is_available() & args.device.startswith('cuda'):
+        device = torch.device(args.device)
     else:
         device = torch.device('cpu')
-    torch.cuda.synchronize()
-    torch.cuda.empty_cache()
+    torch.cuda.synchronize(device)
+    # torch.cuda.empty_cache()
     # os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
     # torch.backends.cudnn.benchmark = True
 
     # CHECK INPUTS #
     #-------------------------------------------------------------------------------------#
-    assert args.arch in ['fc','cnn'], "Unsupported architecture chosen: %s"%args.arch
-    # if bs was not set manually, use default
-    if args.bs is None:
-        args.bs = 128*(args.arch == 'cnn') + 256*(args.arch == 'fc')
+    # assert args.arch in ['fc','cnn'], "Unsupported architecture chosen: %s"%args.arch
 
     # CREATE DIRS #
     #-------------------------------------------------------------------------------------#
@@ -50,7 +48,7 @@ def setup(args):
     with open(setup_path, 'w') as f:
         json.dump(vars(args),f,indent=4)
 
-    return device, '/' + exp_dir + '/'
+    return args.device, '/' + exp_dir + '/'
 
 def main(args):
     # SETUP #
@@ -60,18 +58,24 @@ def main(args):
     for key in vars(args).keys():
         print('\t', key,': ', vars(args)[key])
 
+
     trainer = adv_trainer(
                 root = root,
                 arch = args.arch, 
                 k = args.k,
                 perturb = args.perturb,
-                beta = args.beta,
                 seed = args.seed,
                 save_dir = save_dir, 
                 bs=args.bs, 
                 num_iters=args.iters, 
                 num_queries=args.queries, 
                 num_epochs=args.epochs,
+                no_adv = args.no_adv,
+                lr = args.lr,
+                momentum = args.momentum,
+                decay = args.decay,
+                embedding = args.embedding,
+                dataset = args.dataset,
                 device=device)
 
     trainer.run()
@@ -86,15 +90,34 @@ if __name__ == '__main__':
     parser.add_argument(
         "--arch",
         type=str,
-        default='fc',
-        help="name of architecture to use, either cnn or fc",
+        default='cnn_large',
+        help="name of architecture to use, either VGG11, 19, or fc"
     )
 
+    parser.add_argument(
+        "--no_adv",
+        action = 'store_true',
+        help="removes the adversarial training component, but still performs robust test with perturb"
+    )
+
+    parser.add_argument(
+        "--device",
+        type=str,
+        default='cuda:0',
+        help="name of device to run on",
+    )
+
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default='MNIST',
+        help="name of the dataset",
+    )
     # experiment name for saving models
     parser.add_argument(
         "--exp",
         type=str,
-        default='test',
+        default='test_mnist',
         help="name of the experiment directory to save results to",
     )
 
@@ -116,15 +139,8 @@ if __name__ == '__main__':
     parser.add_argument(
         "--perturb",
         type=int,
-        default=10,
+        default=12,
         help="l_0 budget of adversary to generate adv examples while training",
-    )
-
-    parser.add_argument(
-        "--beta",
-        type=int,
-        default=100,
-        help="paramater for scaling l_inf norm of adversary attack",
     )
 
     parser.add_argument(
@@ -137,14 +153,42 @@ if __name__ == '__main__':
     parser.add_argument(
         "--bs",
         type=int,
-        default=None,
+        default=128,
         help="batchsize of NN, note default is set dependent on net architecture",
+    )
+
+    parser.add_argument(
+        "--lr",
+        type=float,
+        default=0.1,
+        help="initial learning rate",
+    )
+    
+    parser.add_argument(
+        "--momentum",
+        type=float,
+        default=0.9,
+        help="initial momentum",
+    )
+
+    parser.add_argument(
+        "--decay",
+        type=float,
+        default=0.5,
+        help="decay of learning rate and momentum",
+    )
+
+    parser.add_argument(
+        "--embedding",
+        type=int,
+        default=256,
+        help="size of embedding in fc network creating classifier",
     )
 
     parser.add_argument(
         "--iters",
         type=int,
-        default=10,
+        default=5,
         help="times to repeat the training and attacking cycle",
     )
 
@@ -158,7 +202,7 @@ if __name__ == '__main__':
     parser.add_argument(
         "--epochs",
         type=int,
-        default=25,
+        default=10,
         help="how many epochs per iter",
     )
 
