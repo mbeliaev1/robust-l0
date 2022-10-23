@@ -27,14 +27,14 @@ def attack_batch(net, x, y, adversary):
     fooled = (output.max(1)[1] != y[ind_to_fool])
     i_adv = ind_to_fool[fooled]
     r_acc = (1-(len(i_adv) + n_missed)/len(x))*100
-
+    
     # NOTE: To compute norms run this code:
     # pixels = x[i_adv] != new_adv
     # norms = (pixels.sum(axis=-1).sum(axis=-1))
 
     return r_acc, adv[fooled], y[i_adv], i_adv
 
-def attack(net, k, x, y, **kwargs):
+def attack(net, budget, x, y, **kwargs):
     '''
     This is our general untargetedattack function which 
     returns a list of perturbed examples given EITHER a batch
@@ -42,7 +42,7 @@ def attack(net, k, x, y, **kwargs):
     
     Inputs:
         net         - nn.Module that we will be attacking 
-        k           - L_0 budget (maximum perturbation)
+        budget      - L_0 budget (maximum perturbation)
         x           - input data of either batches in the form of list
                         or tensor of shape (bs, c, w, h)
         y           - labels of input data
@@ -73,21 +73,24 @@ def attack(net, k, x, y, **kwargs):
 
     adversary = RSAttack(predict=net,
                     norm='L0',
-                    eps=k,
+                    eps=budget,
                     n_queries=kwargs['n_queries'],
                     n_restarts=kwargs['n_restarts'],
                     device=device,
                     log_path=kwargs['log_path']
                     )
-
     if is_batch:
-        return attack_batch(net, x, y, adversary)
+        return attack_batch(net, x.to(device), y.to(device), adversary)
 
     else:
+        tot_batches = len(x)
         x_adv, y_adv, i_adv = [], [], []
         total = 0
         weighted_acc = 0
+        count = 0
         for x_batch, y_batch in zip(x,y):
+            print('Running sparse-rs attack: %d/%d batches done'%(count,tot_batches), end='\r')
+            count+=1
             # run batch and store in list
             r_acc, b_x_adv, b_y_adv, b_i_adv = attack_batch(net, 
                                                               x_batch.to(device), 

@@ -1,4 +1,4 @@
-from xmlrpc.client import boolean
+# from xmlrpc.client import boolean
 import torch
 import argparse
 import json
@@ -22,7 +22,7 @@ def setup(args):
     else:
         device = torch.device('cpu')
     torch.cuda.synchronize(device)
-    # torch.cuda.empty_cache()
+    torch.cuda.empty_cache()
     # os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
     # torch.backends.cudnn.benchmark = True
 
@@ -32,23 +32,40 @@ def setup(args):
 
     # CREATE DIRS #
     #-------------------------------------------------------------------------------------#
-    exp_name = '%s_k%d_p%d_seed%d'%(args.arch,args.k,args.perturb,args.seed)
-    exp_dir = os.path.join(args.out_dir,args.exp,exp_name)
+    # directory structure for experiments
+    dir_list = ['%s'%args.out_dir, 
+                '%s'%args.exp, 
+                '%s'%args.dataset,
+                '%s'%args.cfg_name,
+                '%s'%args.trunc_type,
+                'k_%d'%args.k,
+                'adv_%d'%args.perturb,
+                '%d'%args.seed]
 
-    if os.path.isdir(exp_dir):
-        raise Exception('%s already exists!!!'%exp_dir)
-    else:
-        if not os.path.isdir(args.out_dir):
-            os.mkdir(args.out_dir)
-        if not os.path.isdir(os.path.join(args.out_dir,args.exp)): 
-            os.mkdir(os.path.join(args.out_dir,args.exp))
-        os.mkdir(exp_dir)
+    # create dir structure
+    save_dir = ''
+    for dirname in dir_list:
+        save_dir += '%s/'%dirname
+        if not os.path.isdir(save_dir):
+            os.mkdir(save_dir)
     
-    setup_path = os.path.join(exp_dir,'setup.json')
+    setup_path = os.path.join(save_dir,'setup.json')
     with open(setup_path, 'w') as f:
         json.dump(vars(args),f,indent=4)
 
-    return args.device, '/' + exp_dir + '/'
+    return args.device, '/' + save_dir
+
+    # exp_dir = os.path.join(args.out_dir,args.exp,exp_name)
+    # if os.path.isdir(exp_dir):
+    #     raise Exception('%s already exists!!!'%exp_dir)
+    # else:
+    #     if not os.path.isdir(args.out_dir):
+    #         os.mkdir(args.out_dir)
+    #     if not os.path.isdir(os.path.join(args.out_dir,args.exp)): 
+    #         os.mkdir(os.path.join(args.out_dir,args.exp))
+    #     os.mkdir(exp_dir)
+    
+
 
 def main(args):
     # SETUP #
@@ -61,22 +78,24 @@ def main(args):
 
     trainer = adv_trainer(
                 root = root,
-                arch = args.arch, 
+                cfg_name = args.cfg_name, 
+                trunc_type = args.trunc_type,
+                dataset = args.dataset,
                 k = args.k,
                 perturb = args.perturb,
-                seed = args.seed,
-                save_dir = save_dir, 
                 bs=args.bs, 
                 num_iters=args.iters, 
-                num_queries=args.queries, 
                 num_epochs=args.epochs,
+                num_queries=args.queries, 
                 no_adv = args.no_adv,
                 lr = args.lr,
                 momentum = args.momentum,
                 decay = args.decay,
                 embedding = args.embedding,
-                dataset = args.dataset,
+                seed = args.seed,
+                save_dir = save_dir, 
                 device=device)
+
 
     trainer.run()
 
@@ -86,12 +105,18 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     
-    # Algorithm Name
     parser.add_argument(
-        "--arch",
+        "--cfg_name",
         type=str,
         default='cnn_large',
         help="name of architecture to use, either VGG11, 19, or fc"
+    )
+
+    parser.add_argument(
+        "--trunc_type",
+        type=str,
+        default='clip',
+        help="name of truncation structure to use"
     )
 
     parser.add_argument(
@@ -202,7 +227,7 @@ if __name__ == '__main__':
     parser.add_argument(
         "--epochs",
         type=int,
-        default=10,
+        default=25,
         help="how many epochs per iter",
     )
 
