@@ -5,6 +5,7 @@ import math
 # import torchvision.datasets as datasets
 # import torchvision.transforms as transforms
 import numpy as np
+from utils.helpers import toeplitz_1_ch
 # Function and nn.Modules for creating tuncation layers
 
 class linear_trunc_ind(nn.Module):
@@ -141,6 +142,96 @@ class trunc_clip(nn.Module):
 
         return x
 
+class trunc_conv(nn.Module):
+    def __init__(self, image_size, kernel_size, k, bias=True):
+        '''
+        Custom convolution layer which manually performs nn.Conv2d. 
+        See torch documentation for reference
+
+        NOTE:
+        Assumes stride is 1 and padding is zero
+        Assumes kernel is and image are square
+        Assumed in and out channels are 1
+        '''
+        super(trunc_conv, self).__init__()
+        self.l = image_size
+        self.ker_dim = kernel_size
+        self.k = k
+        self.out_dim = image_size - kernel_size + 1
+        
+        # initialize weight and bias 
+        self.weight = nn.Parameter(torch.empty(1, 1, kernel_size, kernel_size))
+        if bias:
+            self.bias = nn.Parameter(torch.empty(1))
+        else:
+            self.bias = None
+
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        # Copied directly from torch implementation:
+        # https://github.com/pytorch/pytorch/blob/master/torch/nn/modules/conv.py
+        nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+        if self.bias is not None:
+            fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.weight)
+            if fan_in != 0:
+                bound = 1 / math.sqrt(fan_in)
+                nn.init.uniform_(self.bias, -bound, bound)
+
+    def forward(self, x):
+        '''
+        Performs 2d convolution where x is input
+        '''
+        # build output tensor
+        x_vals = x.clone().detach()
+        z = self._find_mask(x_vals,x.device)
+        out = nn.functional.conv2d(x*z,self.weight,self.bias)
+
+        return out
+    
+    def _find_mask(self,x,device):
+        '''
+        Finds the mask used to weight x in convolution
+        '''
+
+        # flat kern is the conv in matrix form (out_dim**2, in_dim**2)
+        flat_kern = toeplitz_1_ch(self.weight[0,0].detach().cpu(), [self.l,self.l])
+        flat_kern = torch.tensor(flat_kern).to(device)
+        kern_mask = flat_kern != 0
+        assert kern_mask.sum().sum() == (self.out_dim**2)*(self.ker_dim**2)
+        r_scale = 1/kern_mask.sum(axis=0)
+
+        # compute window averages with forward conv pass
+        kern_avg = nn.functional.conv2d(x,self.weight.detach())
+        kern_avg = kern_avg.reshape(x.shape[0],self.out_dim**2)/(self.ker_dim**2)
+
+        # now we compute difference between pixel*featre and window average 
+        r_vals = x.reshape(-1,1,self.l**2)*flat_kern #feature pixel product
+        r_vals -= kern_avg.reshape(-1,self.out_dim**2,1) # subtract all averages
+        r_vals *= kern_mask # remove values where no pixel feature product
+        r_vals = r_vals.sum(axis=1)/r_scale # sum average contribution over all windows
+
+        
+        # for im in range(r_vals.shape[0]):
+        #     # iterate over each kernel, adding contribution to r_vals
+        #     for i_kern in range(flat_kern.shape[0]):
+        #         # print("out image index: ",i_kern//out_dim, i_kern%out_dim)
+        #         kern_avg = np.dot(flat_kern[i_kern],x[im,0].flatten())/(self.ker_dim**2)
+        #         # print(kern_mask[i_kern])
+        #         temp = (flat_kern[i_kern]*x[im,0].flatten()-kern_avg)*kern_mask[i_kern]
+        #         r_vals[im] += temp 
+        #     r_vals[im] /= r_scale
+        
+
+        # now find top and bottom k to create mask
+        _, idx_top = torch.topk(r_vals,self.k) #(bs, out_dim, self.k)
+        _, idx_bot = torch.topk(-1*r_vals,self.k)
+
+        z = torch.ones_like(r_vals).float()
+        z[np.arange(r_vals.shape[0]),idx_top.T] = 0
+        z[np.arange(r_vals.shape[0]),idx_bot.T] = 0
+
+        return z.view(x.shape)
 # COPIES OF FUNCTIONS WITH ABSOLUTE VALUES INSTEAD #
 class linear_trunc_dep_abs(nn.Module):
     def __init__(self, in_features, out_features, k=0, bias=False):
@@ -218,6 +309,96 @@ class trunc_clip_abs(nn.Module):
         # or not
         # x[np.arange(x.shape[0]),idx_top.T] = 0
         return x
+
+class trunc_conv_abs(nn.Module):
+    def __init__(self, image_size, kernel_size, k, bias=True):
+        '''
+        Custom convolution layer which manually performs nn.Conv2d. 
+        See torch documentation for reference
+
+        NOTE:
+        Assumes stride is 1 and padding is zero
+        Assumes kernel is and image are square
+        Assumed in and out channels are 1
+        '''
+        super(trunc_conv, self).__init__()
+        self.l = image_size
+        self.ker_dim = kernel_size
+        self.k = k
+        self.out_dim = image_size - kernel_size + 1
+        
+        # initialize weight and bias 
+        self.weight = nn.Parameter(torch.empty(1, 1, kernel_size, kernel_size))
+        if bias:
+            self.bias = nn.Parameter(torch.empty(1))
+        else:
+            self.bias = None
+
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        # Copied directly from torch implementation:
+        # https://github.com/pytorch/pytorch/blob/master/torch/nn/modules/conv.py
+        nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+        if self.bias is not None:
+            fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.weight)
+            if fan_in != 0:
+                bound = 1 / math.sqrt(fan_in)
+                nn.init.uniform_(self.bias, -bound, bound)
+
+    def forward(self, x):
+        '''
+        Performs 2d convolution where x is input
+        '''
+        # build output tensor
+        x_vals = x.clone().detach()
+        z = self._find_mask(x_vals,x.device)
+        out = nn.functional.conv2d(x*z,self.weight,self.bias)
+
+        return out
+    
+    def _find_mask(self,x,device):
+        '''
+        Finds the mask used to weight x in convolution
+        '''
+
+        # flat kern is the conv in matrix form (out_dim**2, in_dim**2)
+        flat_kern = toeplitz_1_ch(self.weight[0,0].detach().cpu(), [self.l,self.l])
+        flat_kern = torch.tensor(flat_kern).to(device)
+        kern_mask = flat_kern != 0
+        assert kern_mask.sum().sum() == (self.out_dim**2)*(self.ker_dim**2)
+        r_scale = 1/kern_mask.sum(axis=0)
+
+        # compute window averages with forward conv pass
+        kern_avg = nn.functional.conv2d(x,self.weight.detach())
+        kern_avg = kern_avg.reshape(x.shape[0],self.out_dim**2)/(self.ker_dim**2)
+
+        # now we compute difference between pixel*featre and window average 
+        r_vals = x.reshape(-1,1,self.l**2)*flat_kern #feature pixel product
+        r_vals -= kern_avg.reshape(-1,self.out_dim**2,1) # subtract all averages
+        r_vals *= kern_mask # remove values where no pixel feature product
+        r_vals = r_vals.sum(axis=1)/r_scale # sum average contribution over all windows
+
+        
+        # for im in range(r_vals.shape[0]):
+        #     # iterate over each kernel, adding contribution to r_vals
+        #     for i_kern in range(flat_kern.shape[0]):
+        #         # print("out image index: ",i_kern//out_dim, i_kern%out_dim)
+        #         kern_avg = np.dot(flat_kern[i_kern],x[im,0].flatten())/(self.ker_dim**2)
+        #         # print(kern_mask[i_kern])
+        #         temp = (flat_kern[i_kern]*x[im,0].flatten()-kern_avg)*kern_mask[i_kern]
+        #         r_vals[im] += temp 
+        #     r_vals[im] /= r_scale
+        
+
+        # now find top and bottom k to create mask
+        _, idx_top = torch.topk(torch.abs(r_vals),self.k) #(bs, out_dim, self.k)
+
+        z = torch.ones_like(r_vals).float()
+        z[np.arange(r_vals.shape[0]),idx_top.T] = 0
+
+        return z.view(x.shape)
+
 
 # def trunc(x,k):
 #     '''
@@ -300,3 +481,87 @@ class my_conv(nn.Module):
                         out[i_img,out_ch,i,j] = torch.mul(window,self.weight[out_ch]).sum() 
                         out[i_img,out_ch,i,j] += self.bias[out_ch]
         return out
+
+
+# class trunc_conv(nn.Module):
+#     def __init__(self, image_size, kernel_size, k, bias=True):
+#         '''
+#         Custom convolution layer which manually performs nn.Conv2d. 
+#         See torch documentation for reference
+
+#         NOTE:
+#         Assumes stride is 1 and padding is zero
+#         Assumes kernel is and image are square
+#         Assumed in and out channels are 1
+#         '''
+#         super(trunc_conv, self).__init__()
+#         self.l = image_size
+#         self.ker_dim = kernel_size
+#         self.k = k
+#         self.out_dim = image_size - kernel_size + 1
+        
+#         # initialize weight and bias 
+#         self.weight = nn.Parameter(torch.empty(1, 1, kernel_size, kernel_size))
+#         if bias:
+#             self.bias = nn.Parameter(torch.empty(1))
+#         else:
+#             self.bias = None
+
+#         self.reset_parameters()
+
+#     def reset_parameters(self) -> None:
+#         # Copied directly from torch implementation:
+#         # https://github.com/pytorch/pytorch/blob/master/torch/nn/modules/conv.py
+#         nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+#         if self.bias is not None:
+#             fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.weight)
+#             if fan_in != 0:
+#                 bound = 1 / math.sqrt(fan_in)
+#                 nn.init.uniform_(self.bias, -bound, bound)
+
+#     def forward(self, x):
+#         '''
+#         Performs 2d convolution where x is input
+#         '''
+#         # build output tensor
+#         x_vals = x.clone().detach().cpu().numpy()
+#         z = self._find_mask(x_vals,x.device)
+#         out = nn.functional.conv2d(x*z,self.weight,self.bias)
+
+#         return out
+    
+#     def _find_mask(self,x,device):
+#         '''
+#         Finds the mask used to weight x in convolution
+
+#         NOTE:
+#         Assumes x is detached and and np array on cpu
+#         '''
+#         # flatten where we store weight values
+#         r_vals = np.zeros_like(x.reshape(-1,1,self.l**2)).squeeze()
+#         # kernel is same for all image
+#         flat_kern = toeplitz_1_ch(self.weight[0,0].detach().cpu(), [self.l,self.l])
+#         kern_mask = flat_kern != 0
+#         assert kern_mask.sum().sum() == (self.out_dim**2)*(self.ker_dim**2)
+#         r_scale = 1/kern_mask.sum(axis=0)
+
+#         for im in range(r_vals.shape[0]):
+#             # iterate over each kernel, adding contribution to r_vals
+#             for i_kern in range(flat_kern.shape[0]):
+#                 # print("out image index: ",i_kern//out_dim, i_kern%out_dim)
+#                 kern_avg = np.dot(flat_kern[i_kern],x[im,0].flatten())/(self.ker_dim**2)
+#                 # print(kern_mask[i_kern])
+#                 temp = (flat_kern[i_kern]*x[im,0].flatten()-kern_avg)*kern_mask[i_kern]
+#                 r_vals[im] += temp 
+#             r_vals[im] /= r_scale
+#             # print('done with batch ',im)
+#         # now find top and bottom k to create mask
+#         r_vals = torch.tensor(r_vals).to(device)
+#         _, idx_top = torch.topk(r_vals,self.k) #(bs, out_dim, self.k)
+#         _, idx_bot = torch.topk(-1*r_vals,self.k)
+
+#         z = torch.ones_like(r_vals).to(device)
+#         z[np.arange(r_vals.shape[0]),idx_top.T] = 0
+#         z[np.arange(r_vals.shape[0]),idx_bot.T] = 0
+
+#         return z.view(x.shape)

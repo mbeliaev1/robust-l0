@@ -6,7 +6,7 @@ import torch.functional as F
 import numpy as np
 # internal
 from utils.helpers import *
-from utils.trunc import linear_trunc_ind, linear_trunc_dep, trunc_clip, linear_trunc_dep_abs, trunc_clip_abs
+from utils.trunc import *
 
 # Model loaded using config
 cfg = {
@@ -50,12 +50,17 @@ class Net(nn.Module):
         self.b_norm = nn.BatchNorm2d(input_shape[1])
 
     def forward(self, x):
+        # print('1',x.shape)
         x = self.b_norm(x)
-
+        # print('2',x.shape)
         x = self.trunc(x)
+        # print('3',x.shape)
         x = self.features(x)
-        x = x.view(x.size(0), -1) 
+        # print('4',x.shape)
+        x = x.view(x.size(0), -1)
+        # print('5',x.shape) 
         x = self.classifier(x)
+        # print('6',x.shape)
         return x
 
     def _make_trunc(self, k, trunc_type):
@@ -102,6 +107,16 @@ class Net(nn.Module):
             layers.append(nn.Flatten())
             layers.append(trunc_clip_abs(k))
             layers.append(nn.Unflatten(1,(self.input_shape[1:])))
+
+        elif trunc_type == 'conv':
+            layers.append(trunc_conv(image_size=self.input_shape[-1],
+                                     kernel_size=3,
+                                     k=k))
+            
+        elif trunc_type == 'conv_abs':
+            layers.append(trunc_conv_abs(image_size=self.input_shape[-1],
+                                     kernel_size=3,
+                                     k=k))
             
 
         # if neither condition, k=0 and we just pass empty sequential list
@@ -137,7 +152,7 @@ class Net(nn.Module):
     def _make_classifier(self, embedding):
         # first perform a forward pass to get the shape
         with torch.no_grad():
-            temp = self.features(torch.randn(self.input_shape))
+            temp = self.features(self.trunc(torch.randn(self.input_shape)))
             in_size = temp.shape[1:].numel()
 
         layers = []

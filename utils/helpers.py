@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 import numpy as np
-
+from scipy import linalg
 def evaluate(net, x, y, device):
     '''
     gives validation accuracy for dataset and model
@@ -113,3 +113,27 @@ class flatten(object):
         new_image = torch.flatten(sample[0])
         return (new_image)
 
+def toeplitz_1_ch(kernel, input_size):
+    # shapes
+    k_h, k_w = kernel.shape
+    i_h, i_w = input_size
+    o_h, o_w = i_h-k_h+1, i_w-k_w+1
+    
+    # construct 1d conv toeplitz matrices for each row of the kernel
+    toeplitz = []
+    for r in range(k_h):
+        toeplitz.append(linalg.toeplitz(c=(kernel[r,0], *np.zeros(i_w-k_w)), r=(*kernel[r], *np.zeros(i_w-k_w))) ) 
+
+    # construct toeplitz matrix of toeplitz matrices (just for padding=0)
+    h_blocks, w_blocks = o_h, i_h
+    h_block, w_block = toeplitz[0].shape
+
+    W_conv = np.zeros((h_blocks, h_block, w_blocks, w_block))
+
+    for i, B in enumerate(toeplitz):
+        for j in range(o_h):
+            W_conv[j, :, i+j, :] = B
+
+    W_conv.shape = (h_blocks*h_block, w_blocks*w_block)
+
+    return W_conv

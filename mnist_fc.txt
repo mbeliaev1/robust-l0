@@ -1,0 +1,36 @@
+Truncated FC Network, NO ADVERSARIAL TRAINING
+----------------------------------------
+Configuration:
+	 trunc_type :  clip clip
+	 k :  5 5
+	 perturb :  5 5
+----------------------------------------
+NO ADV Acc: 91.12, R. Acc: 44.19
+ADV    Acc: 92.22, R. Acc: 59.64
+----------------------------------------
+Configuration:
+	 trunc_type :  clip_abs clip_abs
+	 k :  5 5
+	 perturb :  5 5
+----------------------------------------
+NO ADV Acc: 91.50, R. Acc: 45.14
+ADV    Acc: 92.47, R. Acc: 57.39
+----------------------------------------
+Configuration:
+	 trunc_type :  clip clip
+	 k :  12 12
+	 perturb :  12 12
+----------------------------------------
+NO ADV Acc: 90.85, R. Acc: 4.80
+ADV    Acc: 92.24, R. Acc: 28.80
+----------------------------------------
+Configuration:
+	 trunc_type :  clip_abs clip_abs
+	 k :  12 12
+	 perturb :  12 12
+----------------------------------------
+NO ADV Acc: 92.35, R. Acc: 0.10
+ADV    Acc: 93.06, R. Acc: 34.88
+----------------------------------------
+
+

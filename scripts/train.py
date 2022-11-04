@@ -9,6 +9,7 @@ root = os.path.abspath(os.curdir)
 sys.path.append(root)
 # local imports
 from utils.adv_trainer import adv_trainer
+import torch.multiprocessing
 
 
 def setup(args):
@@ -23,6 +24,8 @@ def setup(args):
         device = torch.device('cpu')
     torch.cuda.synchronize(device)
     torch.cuda.empty_cache()
+    torch.multiprocessing.set_sharing_strategy('file_system')
+
     # os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
     # torch.backends.cudnn.benchmark = True
 
@@ -178,14 +181,14 @@ if __name__ == '__main__':
     parser.add_argument(
         "--bs",
         type=int,
-        default=128,
+        default=256,
         help="batchsize of NN, note default is set dependent on net architecture",
     )
 
     parser.add_argument(
         "--lr",
         type=float,
-        default=0.1,
+        default=0.01,
         help="initial learning rate",
     )
     
@@ -206,7 +209,7 @@ if __name__ == '__main__':
     parser.add_argument(
         "--embedding",
         type=int,
-        default=256,
+        default=512,
         help="size of embedding in fc network creating classifier",
     )
 

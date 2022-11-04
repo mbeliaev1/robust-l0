@@ -252,13 +252,17 @@ class adv_trainer():
         # Now compute final accuracy + rob accuracy
         self.net.eval()
         acc = self.test()
-
-        assert self.perturb>0
-        r_acc,_,_,_ = self.r_test()
         res_str = "Final testset accuracy: %.3f"%acc
         print(res_str)
         self.results_str.append(res_str)
-        res_str = "Robust accuracy: %.3f"%r_acc
+
+        if self.perturb == 0:
+            r_acc = 0
+            res_str = "Not measuring robust accuracy"
+        else:
+            r_acc,_,_,_ = self.r_test()
+            res_str = "Robust accuracy: %.3f"%r_acc
+            
         print(res_str)
         self.results_str.append(res_str)
 
