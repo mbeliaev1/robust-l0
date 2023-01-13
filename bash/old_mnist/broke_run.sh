@@ -1,0 +1,1 @@
+python scripts/train.py --cfg_name cnn_small --trunc_type clip       --exp beta_100_no --no_adv --k 12 --beta 100 --device cuda:0 --seed 5

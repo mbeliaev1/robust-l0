@@ -7,6 +7,21 @@ import numpy as np
 # internal
 from utils.helpers import *
 from utils.trunc import *
+import json
+
+def load_net(net_path, device, input_shape):
+    config = json.load(open(net_path+'/setup.json','rb'))
+        
+    net = Net(cfg_name=config['cfg_name'],
+            k = config['k'],
+            input_shape=input_shape,
+            trunc_type=config['trunc_type'])
+
+    net.to(device)
+    net.load_state_dict(torch.load(net_path+'/net.pth', map_location=device))
+    net.eval()
+
+    return net
 
 # Model loaded using config
 cfg = {
@@ -33,27 +48,33 @@ class Net(nn.Module):
         cfg_name    - config list for feature network structure
         k           - truncation parameter, if 0 no truncating 
         mu/sigma    - scales that change the input domain
-        embedding   - dimensionality of fc layers in the classifier
         input_shape - one time pass needed to infer shapes (bs, ch, w ,h)
         trunc_type  - optional, str defining truncation type
 
     NOTE: 
         - truncation preserves input shape
         - assumed to have 10 clases
+        - only works with channel size one
     '''
-    def __init__(self, cfg_name, embedding, input_shape, k=0, trunc_type='clip'):
+    def __init__(self, cfg_name, input_shape, k=0, trunc_type='clip'):
         super(Net, self).__init__()
         self.input_shape = input_shape
+        if trunc_type == 'conv':
+            self.in_ch = 1
+        else:
+            self.in_ch = input_shape[1]
+
         self.trunc = self._make_trunc(k, trunc_type) # can be empty
         self.features = self._make_layers(cfg[cfg_name])
-        self.classifier = self._make_classifier(embedding)
-        self.b_norm = nn.BatchNorm2d(input_shape[1])
+        self.classifier = self._make_classifier()
+        self.b_norm = nn.BatchNorm2d(self.in_ch)
+
 
     def forward(self, x):
         # print('1',x.shape)
-        x = self.b_norm(x)
         # print('2',x.shape)
         x = self.trunc(x)
+        x = self.b_norm(x)
         # print('3',x.shape)
         x = self.features(x)
         # print('4',x.shape)
@@ -65,7 +86,7 @@ class Net(nn.Module):
 
     def _make_trunc(self, k, trunc_type):
         '''
-        Truncation layer PRESERVES INPUT SHAPE
+        Truncation layer flattens image to (bs,1,h,w*ch) bnef
         Types of truncation implemented:
 
         linear     - original trunctation from theory, outputs learnable 
@@ -97,26 +118,17 @@ class Net(nn.Module):
             layers.append(trunc_clip(k))
             layers.append(nn.Unflatten(1,(self.input_shape[1:])))
 
-        elif trunc_type == 'linear_dep_abs':
-            # input is always (bs,ch,w,h)
-            layers.append(nn.Flatten())
-            layers.append(linear_trunc_dep_abs(in_shape,in_shape,k=k))
-            layers.append(nn.Unflatten(1,(self.input_shape[1:])))
-
-        elif trunc_type == 'clip_abs':
-            layers.append(nn.Flatten())
-            layers.append(trunc_clip_abs(k))
-            layers.append(nn.Unflatten(1,(self.input_shape[1:])))
-
         elif trunc_type == 'conv':
-            layers.append(trunc_conv(image_size=self.input_shape[-1],
+            layers.append(trunc_conv(image_shape=self.input_shape,
+                                     out_ch = self.in_ch,
                                      kernel_size=3,
                                      k=k))
-            
-        elif trunc_type == 'conv_abs':
-            layers.append(trunc_conv_abs(image_size=self.input_shape[-1],
-                                     kernel_size=3,
-                                     k=k))
+        
+        elif trunc_type == 'simple':
+            layers.append(nn.Flatten())
+            layers.append(trunc_simple(in_shape,k=k))
+            layers.append(nn.Unflatten(1,(self.input_shape[1:])))
+
             
 
         # if neither condition, k=0 and we just pass empty sequential list
@@ -137,7 +149,7 @@ class Net(nn.Module):
             return nn.Sequential(*layers)
 
         # convolution networks
-        in_channels = self.input_shape[1]
+        in_channels = self.in_ch
         for x in cfg:
             # print('in here: ',in_channels,x)
             if x == 'M':
@@ -147,17 +159,15 @@ class Net(nn.Module):
                            nn.BatchNorm2d(x),
                            nn.ReLU(inplace=True)]
                 in_channels = x
+        layers += [nn.AvgPool2d(kernel_size=1, stride=1)]
         return nn.Sequential(*layers)
 
-    def _make_classifier(self, embedding):
+    def _make_classifier(self):
         # first perform a forward pass to get the shape
         with torch.no_grad():
             temp = self.features(self.trunc(torch.randn(self.input_shape)))
             in_size = temp.shape[1:].numel()
 
         layers = []
-        layers += [nn.Linear(in_size,embedding),
-                   nn.BatchNorm1d(embedding),
-                   nn.ReLU(inplace=True),
-                   nn.Linear(embedding,10)]            
+        layers += [nn.Linear(in_size,10)]         
         return nn.Sequential(*layers)

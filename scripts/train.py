@@ -9,7 +9,7 @@ root = os.path.abspath(os.curdir)
 sys.path.append(root)
 # local imports
 from utils.adv_trainer import adv_trainer
-import torch.multiprocessing
+# import torch.multiprocessing
 
 
 def setup(args):
@@ -39,6 +39,7 @@ def setup(args):
     dir_list = ['%s'%args.out_dir, 
                 '%s'%args.exp, 
                 '%s'%args.dataset,
+                '%d'%args.beta,
                 '%s'%args.cfg_name,
                 '%s'%args.trunc_type,
                 'k_%d'%args.k,
@@ -86,15 +87,13 @@ def main(args):
                 dataset = args.dataset,
                 k = args.k,
                 perturb = args.perturb,
+                beta = args.beta,
                 bs=args.bs, 
-                num_iters=args.iters, 
                 num_epochs=args.epochs,
                 num_queries=args.queries, 
                 no_adv = args.no_adv,
                 lr = args.lr,
                 momentum = args.momentum,
-                decay = args.decay,
-                embedding = args.embedding,
                 seed = args.seed,
                 save_dir = save_dir, 
                 device=device)
@@ -111,7 +110,7 @@ if __name__ == '__main__':
     parser.add_argument(
         "--cfg_name",
         type=str,
-        default='cnn_large',
+        default='cnn_small',
         help="name of architecture to use, either VGG11, 19, or fc"
     )
 
@@ -145,7 +144,7 @@ if __name__ == '__main__':
     parser.add_argument(
         "--exp",
         type=str,
-        default='test_mnist',
+        default='final',
         help="name of the experiment directory to save results to",
     )
 
@@ -172,9 +171,16 @@ if __name__ == '__main__':
     )
 
     parser.add_argument(
+        "--beta",
+        type=float,
+        default=1,
+        help="l_inf bound scaling",
+    )
+
+    parser.add_argument(
         "--seed",
         type=int,
-        default=99,
+        default=0,
         help="experiment seed",
     )
 
@@ -200,38 +206,17 @@ if __name__ == '__main__':
     )
 
     parser.add_argument(
-        "--decay",
-        type=float,
-        default=0.5,
-        help="decay of learning rate and momentum",
-    )
-
-    parser.add_argument(
-        "--embedding",
-        type=int,
-        default=512,
-        help="size of embedding in fc network creating classifier",
-    )
-
-    parser.add_argument(
-        "--iters",
-        type=int,
-        default=5,
-        help="times to repeat the training and attacking cycle",
-    )
-
-    parser.add_argument(
         "--queries",
         type=int,
-        default=300,
+        default=100,
         help="time budget for each rs attack",
     )
 
     parser.add_argument(
         "--epochs",
         type=int,
-        default=25,
-        help="how many epochs per iter",
+        default=20,
+        help="how many epochs",
     )
 
     args = parser.parse_args()

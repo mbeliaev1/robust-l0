@@ -5,6 +5,7 @@ import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 import numpy as np
 from scipy import linalg
+
 def evaluate(net, x, y, device):
     '''
     gives validation accuracy for dataset and model
@@ -31,6 +32,43 @@ def evaluate(net, x, y, device):
     acc = 100 * (correct / total)
     return acc
 
+def beta_transform(data, beta):
+    '''
+    performs linear transformation on data of [bs, c, h, w] to change its range from 1 to 1/beta
+    while keeping mean the same
+
+    input:
+
+        data - np array of shape bs, ch, h, w
+        beta - integer
+    '''
+    # shape = data.shape
+    # size = shape.numel()
+    
+    out = data - ((1-beta)/2)
+    out *= 1/beta
+
+    return out
+
+def beta_revert(data, beta):
+    '''
+    reverts to original domain
+
+    input:
+
+        data - np array of shape bs, ch, h, w
+        beta - integer
+    '''
+    # shape = data.shape
+    # size = shape.numel()
+    
+    out = data/(1/beta)
+    out += ((1-beta)/2)
+
+    return out
+
+
+
 def prep_data(root, bs, dataset):
     '''
     Preps the CIFAR or MNIST Dataset from root/datasets/, loading in all
@@ -46,13 +84,15 @@ def prep_data(root, bs, dataset):
             transforms.RandomCrop(32, padding=4),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
+            # transforms.LinearTransformation(torch.eye(3*32*32)*(1/beta),torch.ones(3*32*32)*((1-beta)/2))
             # transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-            transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5)),
+            # transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5)),
         ])
         transform_test = transforms.Compose([
             transforms.ToTensor(),
+            # transforms.LinearTransformation(torch.eye(3*32*32)*(1/beta),torch.ones(3*32*32)*((1-beta)/2))
             # transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-            transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5)),
+            # transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5)),
         ])
         trainset = datasets.CIFAR10(root=root+'/datasets/CIFAR/', train=True,
                                             download=True, transform=transform_train)
@@ -64,13 +104,15 @@ def prep_data(root, bs, dataset):
             transforms.RandomCrop(28, padding=4),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
+            # transforms.LinearTransformation(torch.eye(28*28)*(1/beta),torch.ones(28*28)*((1-beta)/2))
             # transforms.Normalize((0.1307,), (0.3081,)),
-            transforms.Normalize((0.5,), (0.5,)),
+            # transforms.Normalize((0.5,), (0.5,)),
         ])
         transform_test = transforms.Compose([
             transforms.ToTensor(),
+            # transforms.LinearTransformation(torch.eye(28*28)*(1/beta),torch.ones(28*28)*((1-beta)/2))
             # transforms.Normalize((0.1307,), (0.3081,)),
-            transforms.Normalize((0.5,), (0.5,)),
+            # transforms.Normalize((0.5,), (0.5,)),
         ])
 
         trainset = datasets.MNIST(root=root+'/datasets/',train = True,
@@ -78,8 +120,9 @@ def prep_data(root, bs, dataset):
         testset = datasets.MNIST(root=root+'/datasets/',train = False,
                                     download = True, transform=transform_test)
 
+    # convert data to our desired form
     train_loader = torch.utils.data.DataLoader(trainset, batch_size=bs,
-                                            shuffle=True, num_workers=2)
+                                            shuffle=False, num_workers=2)
     test_loader = torch.utils.data.DataLoader(testset, batch_size=bs,
                                             shuffle=False, num_workers=2)
     # Finally compile loaders into Data structure
@@ -89,11 +132,17 @@ def prep_data(root, bs, dataset):
     Data['y_test'] = []
     Data['x_train'] = []
     Data['y_train'] = []
-   
-    # Go through loaders collecting data
-    for _, data in enumerate(train_loader, 0):
-        Data['x_train'].append(data[0])
-        Data['y_train'].append(data[1])
+    Data['x_valid'] = []
+    Data['y_valid'] = []
+    
+    # Go through loaders collecting data (first 4 batches are validation set)
+    for i, data in enumerate(train_loader, 0):
+        if i*bs < 1000:
+            Data['x_valid'].append(data[0])
+            Data['y_valid'].append(data[1])
+        else:
+            Data['x_train'].append(data[0])
+            Data['y_train'].append(data[1])
 
     for _, data in enumerate(test_loader, 0):
         Data['x_test'].append(data[0])
@@ -137,3 +186,22 @@ def toeplitz_1_ch(kernel, input_size):
     W_conv.shape = (h_blocks*h_block, w_blocks*w_block)
 
     return W_conv
+
+def toeplitz_mult_ch(kernel, input_size):
+    """Compute toeplitz matrix for 2d conv with multiple in and out channels.
+    Args:
+        kernel: shape=(n_out, n_in, H_k, W_k)
+        input_size: (n_in, H_i, W_i)"""
+
+    kernel_size = kernel.shape
+    output_size = (kernel_size[0], input_size[1] - (kernel_size[2]-1), input_size[2] - (kernel_size[3]-1))
+    T = np.zeros((output_size[0], int(np.prod(output_size[1:])), input_size[0], int(np.prod(input_size[1:]))))
+
+    for i,ks in enumerate(kernel):  # loop over output channel
+        for j,k in enumerate(ks):  # loop over input channel
+            T_k = toeplitz_1_ch(k, input_size[1:])
+            T[i, :, j, :] = T_k
+
+    T.shape = (np.prod(output_size), np.prod(input_size))
+
+    return T

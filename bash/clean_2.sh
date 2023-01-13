@@ -1,2 +1,0 @@
-python scripts/train.py --no_adv --cfg_name VGG13 --dataset CIFAR --exp clean_CNN --perturb 0 --lr 0.2  --bs 256 --device cuda:0
-python scripts/train.py --no_adv --cfg_name VGG13 --dataset CIFAR --exp clean_CNN --perturb 0 --lr 0.1  --bs 256 --device cuda:0

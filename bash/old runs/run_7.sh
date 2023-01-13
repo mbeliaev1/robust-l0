@@ -1,0 +1,32 @@
+python scripts/train.py  --cfg_name cnn_small --trunc_type simple   --dataset MNIST --exp newest_adv --k 12 --perturb 12 --lr 0.01 --bs 256 --iters 4 --seed 11  --device cuda:1
+python scripts/train.py  --cfg_name cnn_small --trunc_type clip     --dataset MNIST --exp newest_adv --k 12 --perturb 12 --lr 0.01 --bs 256 --iters 4 --seed 11  --device cuda:1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
