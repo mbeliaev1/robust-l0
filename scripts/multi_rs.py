@@ -3,6 +3,7 @@ import torch
 import argparse
 import json
 import logging
+import pickle
 from tqdm import trange
 # PATHING
 import os
@@ -67,14 +68,14 @@ def setup_device(args):
 def eval_config(args, model, budget, beta, data, device):
     # clean accuracy
     if budget == 0:
-        acc = evaluate(model, data['x_test'], data['y_test'], device)
-        logging.info('\tClean Accuracy: %.3f'%acc)
+        r_acc = evaluate(model, data['x_test'], data['y_test'], device)
+        logging.info('\tClean Accuracy: %.3f'%r_acc)
     else:
         # robust accuracy one  batch
         r_acc, _, _, _ = attack(model, 
                                 budget=budget, 
-                                x=data['x_test'][0],
-                                y=data['y_test'][0],
+                                x=data['x_test'][0:5],
+                                y=data['y_test'][0:5],
                                 beta = beta,
                                 n_queries=args.queries,
                                 n_restarts=args.restarts,
@@ -83,11 +84,12 @@ def eval_config(args, model, budget, beta, data, device):
 
         logging.info('\tbudget=%d: %.3f'%(budget,r_acc))
 
+    return r_acc
+
 def main(args):
     print('Starting Evaluation . . .')
     # setup device
     device = setup_device(args)
-    
     # setup logger
     logging.basicConfig(filename=os.path.join(args.eval_dir,args.log_name), 
                         level=logging.DEBUG, 
@@ -107,11 +109,15 @@ def main(args):
     # load model and data (NOTE: loading dataset redundancy)
     for i in trange(len(cfg_paths)):
         # print('Evaluating model %d/%d . . .'%(i,len(cfg_paths)))
+        result_arr = []
         model, data, config = setup_config(cfg_paths[i], device)
         # go over all budgets:
-        for budget in [12,40,55,60,65,70,75,80,85,90,95,100]:
-            eval_config(args, model, budget, args.beta, data, device)
-
+        for budget in np.arange(0,101,2):
+            r_acc = eval_config(args, model, budget, args.beta, data, device)
+            result_arr.append(r_acc)
+        result_str = 'result_%s_%d_%d.p'%(config['dataset'],config['k'],args.beta)
+        pickle.dump(result_arr,open(os.path.join(args.eval_dir,result_str),'wb'))
+        print(result_arr)
     print('Finished Evaluation!')
 
 if __name__ == '__main__':
@@ -127,15 +133,8 @@ if __name__ == '__main__':
     parser.add_argument(
         "--log_name",
         type=str,
-        default = 'multi_rs.txt',
+        default = 'final_rs.txt',
         help="Name of log to save to (always saves to cfg_path)"
-    )
-
-    parser.add_argument(
-        "--budget",
-        type=int,
-        default=51,
-        help="maximum l_0 budget to use",
     )
 
     parser.add_argument(

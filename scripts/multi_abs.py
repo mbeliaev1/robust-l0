@@ -11,6 +11,7 @@ import torch
 import argparse
 import json
 import logging
+import pickle
 from tqdm import trange
 # PATHING
 import os
@@ -41,7 +42,7 @@ def main(args):
         logging.info('\t%s:%s'%(key,str(vars(args)[key])))
     logging.info('-----------------------------------------------')
 
-    bs = 100
+    bs = 500
     device = args.device
     model = mz.get_VAE(n_iter=50).to(device)              # ABS do n_iter=1 for speedup (but ess accurate)
     x, y_target = u.get_batch(bs)  
@@ -54,9 +55,11 @@ def main(args):
     queries = args.queries
     restarts = args.restarts
     
-    for budget in [12,40,55,60,65,70,75,80,85,90,95,100]:
+    result_arr = []
+    for budget in np.arange(0,101,2):
         if budget == 0:
             logging.info('\tclean accuracy: %.2f'%acc)
+            result_arr.append(acc)
         else:
             r_acc, _, _, _ = attack(model, 
                                     budget=budget, 
@@ -66,9 +69,14 @@ def main(args):
                                     n_queries=queries,
                                     n_restarts=restarts,
                                     device=device,
-                                    log_path=os.path.join(args.log_dir,'cont_rs_log_multi%.2f.txt'%args.beta))
+                                    log_path=os.path.join(args.log_dir,'multi_log_%.2f.txt'%args.beta))
 
             logging.info('\tbudget=%d: %.3f'%(budget,r_acc))
+            result_arr.append(r_acc)
+
+    result_str = 'result.p'
+    pickle.dump(result_arr,open(os.path.join(args.log_dir,result_str),'wb'))
+    print(result_arr)
 
 if __name__ == '__main__':
 
