@@ -34,11 +34,11 @@ class Ablation_wrapper():
 
     def __call__(self, x):
         # values below are for MNIST
-        # predicted = utils.predict(x.to('cuda:0'), self.model, 45, 10000, 0.05)
+        predicted = utils.predict(x.to('cuda:0'), self.model, 45, 10000, 0.05)
 
         # values below are for CIFAR 
         # default value is 10000 samples, but we set to 5000 due to memeory capacity
-        predicted = utils_cifar.predict(x.to('cuda:0'), self.model, 75, 2000, 0.05)
+        # predicted = utils_cifar.predict(x.to('cuda:0'), self.model, 75, 2000, 0.05)
         predicted[predicted<0] = torch.tensor(np.random.randint(0,10,(predicted<0).sum().item()))
         logits = torch.nn.functional.one_hot(predicted, 10).float()
         return logits.to('cuda:0')

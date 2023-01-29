@@ -240,7 +240,7 @@ class adv_trainer():
                                         lr=self.lr/10, 
                                         momentum=self.momentum,
                                         weight_decay=5e-4)
-            if (epoch+1)/self.num_epochs == 1:
+            if (epoch+1)/self.num_epochs == 0.95:
                 print('changing epoch at last step')
                 self.optimizer = optim.SGD(self.net.parameters(), 
                                         lr=self.lr/100, 
