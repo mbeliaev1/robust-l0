@@ -15,21 +15,21 @@ from utils.models import load_net
 from utils.helpers import *
 from utils.attack import attack
 
-def run_pw_attack(model,data_x,data_y,num_iters,beta,device):
+def run_pw_attack(model,data_x,data_y,num_iters,device):
     '''
     Runs pointwise attack on model using x,y
     NOTE: assumes x,y is list of tensors 
     '''
 
     # calculate bounds
-    in_b = np.array([0,1])
-    out_b = in_b/(1/beta)
-    out_b += ((1-beta)/2)
-    logging.critical('Using bounds: %.2f,%.2f'%(out_b[0],out_b[1]))
+    # in_b = np.array([0,1])
+    # out_b = in_b/(1/beta)
+    # out_b += ((1-beta)/2)
+    # logging.critical('Using bounds: %.2f,%.2f'%(out_b[0],out_b[1]))
 
     # load models
     fmodel = foolbox.models.PyTorchModel(model=model,
-                                        bounds=(out_b[0],out_b[1]),
+                                        bounds=(0,1),
                                         num_classes=10,
                                         channel_axis=1,
                                         device=device)
@@ -92,7 +92,7 @@ def setup_config(cfg_path, device):
     # for key in config.keys(): # could replace with important keys
 
 
-    for key in ['dataset', 'no_adv', 'trunc_type', 'k', 'beta', 'seed']:
+    for key in ['dataset', 'no_adv', 'trunc_type', 'k', 'perturb', 'seed']:
         logging.critical('\t%s:%s'%(key,str(config[key])))
     
     data = prep_data(root, bs=args.samples, dataset=config['dataset'])
@@ -125,7 +125,7 @@ def setup_device(args):
 
     return device
 
-def eval_config(args, model, beta, data, device):
+def eval_config(args, model, data, device):
     # clean accuracy
     acc = evaluate(model, data['x_test'], data['y_test'], device)
     logging.critical('Clean Accuracy: %.3f'%acc)
@@ -135,7 +135,6 @@ def eval_config(args, model, beta, data, device):
                                 data_x=data['x_test'][0:1],
                                 data_y=data['y_test'][0:1],
                                 num_iters=args.iters,
-                                beta=args.beta,
                                 device=device)
 
     logging.critical('Median values:')
@@ -166,7 +165,7 @@ def main(args):
     for i in trange(len(cfg_paths)):
         # print('Evaluating model %d/%d . . .'%(i,len(cfg_paths)))
         model, data, config = setup_config(cfg_paths[i], device)
-        eval_config(args, model, args.beta, data, device)
+        eval_config(args, model, data, device)
 
     print('Finished Evaluation!')
 if __name__ == '__main__':
@@ -207,14 +206,6 @@ if __name__ == '__main__':
         default='cuda:0',
         help="name of device to run on",
     )
-
-    parser.add_argument(
-        "--beta",
-        type=float,
-        default=1,
-        help="beta value NOTE: for now only 1",
-    )
-
 
     args = parser.parse_args()
     main(args)

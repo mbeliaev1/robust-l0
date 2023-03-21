@@ -33,7 +33,7 @@ def setup_config(cfg_path, device):
     if args.beta != 0:
         config['beta'] = args.beta
 
-    for key in ['dataset', 'no_adv', 'trunc_type', 'k', 'beta', 'seed']:
+    for key in ['dataset', 'no_adv', 'trunc_type', 'k', 'perturb','beta', 'seed']:
         logging.info('\t%s:%s'%(key,str(config[key])))
     
 
@@ -75,7 +75,7 @@ def eval_config(args, model, beta, data, device):
 
     # robust accuracy one  batch
     r_acc, _, _, _ = attack(model, 
-                            budget=12, 
+                            budget=args.budget, 
                             x=data['x_test'][0],
                             y=data['y_test'][0],
                             beta = beta,
@@ -85,7 +85,7 @@ def eval_config(args, model, beta, data, device):
                             log_path='temp.log')
 
     logging.info('Robust Accuracy')
-    logging.info('\tsparse-rs: %.3f'%r_acc)
+    logging.info('\tsparse-rs w/ budget %d: %.3f'%(args.budget,r_acc))
 
 def main(args):
     print('Starting Evaluation . . .')
