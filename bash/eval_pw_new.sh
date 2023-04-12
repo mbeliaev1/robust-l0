@@ -1,1 +1,0 @@
-python scripts/eval_pw.py --log_name eval_pw_b1.txt   --eval_dir new_exps --device cuda:1 --beta 1

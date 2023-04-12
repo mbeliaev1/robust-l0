@@ -117,7 +117,7 @@ if __name__ == '__main__':
     parser.add_argument(
         "--trunc_type",
         type=str,
-        default='clip',
+        default='simple',
         help="name of truncation structure to use"
     )
 

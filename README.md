@@ -1,7 +1,7 @@
 # Truncation as a Defense for Sparse Attacks
-This directory is supplementary material for our work presented at "": 
+This directory is supplementary material for our work submitted to IEEE Transactions on Signal Processing:
 
-[Paper Title](google.com) Authors, , .s
+[Efficient and Robust Classification for Sparse Attacks](google.com) Mark Beliaev, Payam Delgosha, Hamed Hassani, Ramtin Pedarsani.
 
 All relevant citations for methods used are found in the paper's list of references.
 
@@ -24,9 +24,6 @@ Description on how to use the code provided to train our truncated models from s
 Description on how to use the code provided to validate our results by evaluating the provided pre-trained models, **or** evaluate results for newly trained models.
 
 ## I. Requirements
-There are two ways to setup the environment, either manually (1) or using the provided .yml file (2). If you plan on using a GPU, we recommend going with (1) as this will assure you setup the correct cuda environment specific to your machine, while (2) might resort to the cpu. 
-
-### (1) Manual
 We recommend using pacakge manager [pip](https://pip.pypa.io/en/stable/) as well as 
 [conda](https://www.anaconda.com/products/individual) to install the relative packages:
 
@@ -52,13 +49,15 @@ pip install foolbox==2.4.0 tqdm
 
 **datasets/**
 
-The MNIST and CIFAR datasets will be downloaded and stored here if they are not already present when one runs **train/lin/train.py** or **train/conv/train.py** for the first time. 
-
-Each of the three files requires an additional arguement when executing in the terminal: the path of the parent directory for the network we want to test. Details of how to use these files with the provided pre_trained models to validate our results is given in [IV. Evaluating results](#iv.-evaluating-results).
+The MNIST and CIFAR datasets will be downloaded and stored here if they are not already present when one runs **scripts/train.py** or **scripts/train.py** for the first time. 
 
 **new_trained/**
 
 Empty folder structure for storing the results of new adversarially trained networks. Structure of results saved is found in **scripts/train.py**. 
+
+**figures/**
+
+Containes the code used to generate the figures from our experiment.
 
 **scripts/**
 
@@ -68,55 +67,48 @@ Scripts for training and evaluating models. Usage found in sections [III. Traini
 
 All required code to perform our experiments, including the LICENSE file for sparse-rs.
 
-(1) **adv.py**: Contains the general adversarial training class used for our experiments.  
+(1) **adv_trainer.py**: Contains the general adversarial training class used for our experiments.  
 
-(2) **models.py**: Contains all the models we used for our experiments.
+(2) **attack.py**: Contains the general attack class used for our experiments.  
 
-(3) **sparse_rs.py**: Contains the sparse-rs class that is used to attack our networks in **adv.py**. This file is different from the original version as we use the MNIST dataset ontop of CIFAR, and change variables based on which experiment is being performed. The license corresponding to the originally used sparse-rs code is provided in the **utils/** folder.
+(3) **models.py**: Contains all the models used for our experiments.
 
-(4) **helpers.py**: Contains helper functions utilized throughout our code. Specifically this file contains the custom truncation module used for FC networks, and the truncation function used for convolution networks.
+(4) **attacks/sparse_rs.py**: Contains the sparse-rs class that is used to attack our networks in **adv.py**. This file is different from the [original version](https://github.com/fra31/sparse-rs/blob/master/rs_attacks.py) as we use the MNIST dataset ontop of CIFAR, and change variables based on which experiment is being performed. 
+
+(5) **helpers.py**: Contains various helper methods used in our experiments 
+
+(6) **trunc.py**: Contains various truncation implementations. Note that our experiments only utilized the "simple" truncation mechanism as we found it to have the best overall perforamnce. 
 
 ## III. Training from scratch
 
 We will briefly cover the details of the training and evaluation scripts found in **scripts/**, setting the parameters for epochs, queries, and iterations to arbitrary numbers that generate the results quickly. For full evaluation and training as done in the paper experiments, in most cases you should use the default paramters, but we urge you to check the paper for specific configurations.
 
-To train the FC network with truncation parameter k=10 and save to **/new_trained/test/**:
+To train a samll CNN with truncation parameter k=12 on MNIST and save to **/new_trained/test/**:
 
 ```console
-python scripts/train.py --arch fc --k 10 --perturb 10 --seed 99 --epochs 2 --queries 10 --iters 2 
+python scripts/train.py --cfg_name cnn_small --trunc_type simple --dataset MNIST --exp test --k 12 --perturb 12 --seed 0 --epochs 2 --queries 10 --iters 2 
 ```
 
-Each training epoch takes 29-30 it/s on an RTX 3080. Note that the computational bottleneck here is the adversarial component, hence we set number of queries (t) to 10. A corresponding directory will be created at **/new_trained/test/fc_k10_p10_seed99** with the model and sparse rs log. 
-
-To remove the truncation parameter and use the default FC network, simply set k to zero:
+To remove the truncation parameter and use the default CNN network with adversarial training, simply set k to zero while keeping perturb at the desired magnitude:
 
 ```console
-python scripts/train.py --arch fc --k 0 --perturb 10 --seed 99 --epochs 2 --queries 10 --iters 2 
+python scripts/train.py --cfg_name cnn_small --dataset MNIST --exp test --k 0 --perturb 12 --seed 0 --epochs 2 --queries 10 --iters 2 
 ```
 
-For the convolution networks with truncation components attached to the VGG architecture:
+To remove teh adversarial componenet completely you need the no_adv flag:
 
 ```console
-python scripts/train.py --arch cnn --k 10 --perturb 10 --seed 99 --epochs 2 --queries 10 --iters 2
-```
-
-This trains using the setup from Table 2, letting k=10 and t=300. Each training epoch takes 32-33 it/s on an RTX 3080. A corresponding directory will be created at **/new_trained/test/cnn_k10_p10_seed99** with the model and sparse rs log.
-
-Once again, to remove the truncation parameter, simply set k to zero:
-
-```console
-python scripts/train.py --arch cnn --k 0 --perturb 10 --seed 99 --epochs 2 --queries 10 --iters 2
+python scripts/train.py --cfg_name cnn_small --dataset MNIST --exp test --k 0 --no_adv --seed 0 --epochs 2 --queries 10 --iters 2 
 ```
 
 ## IV. Evaluating results
 
-To evaluate a particular network, use the script **scripts/eval.py** and set the corresponding arguements. For example, we can evaluate all 4 networks we just trained, measuring their accuracy, robust accuracy with sparseRS, and median adversarial attack magnitude wit the pointwise attack:
+To evaluate a particular network, use one of the 3 eval scripts **scripts/eval_rs.py**,**scripts/eval_pw.py**, or **scripts/multi_rs.py** and set the corresponding arguements. For example, we can evaluate all 4 networks we just trained, measuring their accuracy, robust accuracy with sparseRS, and median adversarial attack magnitude wit the pointwise attack:
 
 ```console
-python scripts/eval.py --mode all --exp test --name fc_k10_p10_seed99 --perturb 10 --queries 10
-python scripts/eval.py --mode all --exp test --name fc_k0_p10_seed99 --perturb 10 --queries 10
-python scripts/eval.py --mode all --exp test --name cnn_k10_p10_seed99 --perturb 10 --queries 10
-python scripts/eval.py --mode all --exp test --name cnn_k0_p10_seed99 --perturb 10 --queries 10
+python scripts/eval_rs.py --eval_dir new_trained/test --budget 12 --queries 500 --restarts 1 
+python scripts/eval_pw.py --eval_dir new_trained/test --iters 10  --sampels 100 
+
 ```
 
-Note that the experiment configuarion is loaded using the --name arguement using the corresponding json file in that directory. This time, the arguement perturb controls the l0 magnitude of the attack for testing robust accuracy, whereas in **scripts/train.py** it controlled the magnitude of the attack in the adversarial training component. Note that using --all performs all three tests and saves them as **acc.p**, **rs.p** and **pw.p** within the expirement directory.
+Note that the experiment configuarions are loaded by loading all the json configurations found in the provided directory given by the --eval_dir arguement. For sparse-rs, when evaluating the arguement perturb controls the l0 magnitude of the attack for testing robust accuracy, whereas in **scripts/train.py** it controlls the magnitude of the attack in the adversarial training component. 
