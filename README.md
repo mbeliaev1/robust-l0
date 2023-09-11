@@ -1,5 +1,5 @@
 # Truncation as a Defense for Sparse Attacks
-This directory is supplementary material for our work submitted to IEEE Transactions on Signal Processing:
+This directory is supplementary material for our work submitted to IEEE Transactions on Neural Networks and Learning Systems:
 
 [Efficient and Robust Classification for Sparse Attacks](google.com) Mark Beliaev, Payam Delgosha, Hamed Hassani, Ramtin Pedarsani.
 
@@ -111,4 +111,4 @@ python scripts/eval_pw.py --eval_dir new_trained/test --iters 10  --sampels 100
 
 ```
 
-Note that the experiment configuarions are loaded by loading all the json configurations found in the provided directory given by the --eval_dir arguement. For sparse-rs, when evaluating the arguement perturb controls the l0 magnitude of the attack for testing robust accuracy, whereas in **scripts/train.py** it controlls the magnitude of the attack in the adversarial training component...
+Note that the experiment configuarions are loaded by loading all the json configurations found in the provided directory given by the --eval_dir arguement. For sparse-rs, when evaluating the arguement perturb controls the l0 magnitude of the attack for testing robust accuracy, whereas in **scripts/train.py** it controlls the magnitude of the attack in the adversarial training component. 
