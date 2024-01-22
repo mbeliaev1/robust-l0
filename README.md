@@ -85,19 +85,19 @@ We will briefly cover the details of the training and evaluation scripts found i
 
 To train a samll CNN with truncation parameter k=12 on MNIST and save to **/new_trained/test/**:
 
-```console
+```bash
 python scripts/train.py --cfg_name cnn_small --trunc_type simple --dataset MNIST --exp test --k 12 --perturb 12 --seed 0 --epochs 2 --queries 10 --iters 2 
 ```
 
 To remove the truncation parameter and use the default CNN network with adversarial training, simply set k to zero while keeping perturb at the desired magnitude:
 
-```console
-python scripts/train.py --cfg_name cnn_small --dataset MNIST --exp test --k 0 --perturb 12 --seed 0 --epochs 2 --queries 10 --iters 2 
+```bash
+python scripts/train.py --cfg_name cnn_small --dataset MNIST --exp test --k 0 =- --seed 0 --epochs 2 --queries 10 --iters 2 
 ```
 
 To remove teh adversarial componenet completely you need the no_adv flag:
 
-```console
+```bash
 python scripts/train.py --cfg_name cnn_small --dataset MNIST --exp test --k 0 --no_adv --seed 0 --epochs 2 --queries 10 --iters 2 
 ```
 
@@ -105,10 +105,28 @@ python scripts/train.py --cfg_name cnn_small --dataset MNIST --exp test --k 0 --
 
 To evaluate a particular network, use one of the 3 eval scripts **scripts/eval_rs.py**,**scripts/eval_pw.py**, or **scripts/multi_rs.py** and set the corresponding arguements. For example, we can evaluate all 4 networks we just trained, measuring their accuracy, robust accuracy with sparseRS, and median adversarial attack magnitude wit the pointwise attack:
 
-```console
+```bash
 python scripts/eval_rs.py --eval_dir new_trained/test --budget 12 --queries 500 --restarts 1 
 python scripts/eval_pw.py --eval_dir new_trained/test --iters 10  --sampels 100 
 
 ```
 
 Note that the experiment configuarions are loaded by loading all the json configurations found in the provided directory given by the --eval_dir arguement. For sparse-rs, when evaluating the arguement perturb controls the l0 magnitude of the attack for testing robust accuracy, whereas in **scripts/train.py** it controlls the magnitude of the attack in the adversarial training component. 
+
+## additonal experiments
+```bash
+python scripts/train.py --cfg_name cnn_small --trunc_type simple --dataset MNIST --exp final_long_noadv --k 12 --no_adv --seed 0 --epochs 100 --queries 500 
+python scripts/train.py --cfg_name cnn_small --trunc_type simple --dataset MNIST --exp final_long_noadv --k 50 --no_adv --seed 0 --epochs 100 --queries 500 
+python scripts/train.py --cfg_name VGG16 --trunc_type simple --dataset CIFAR --exp final_long_noadv --k 12 --no_adv --seed 0 --epochs 100 --queries 500 --bs 128 --lr 0.1 
+python scripts/train.py --cfg_name VGG16 --trunc_type simple --dataset CIFAR --exp final_long_noadv --k 50 --no_adv --seed 0 --epochs 100 --queries 500 --bs 128 --lr 0.1 
+
+python scripts/eval_rs.py --eval_dir new_trained/final_long_noadv/MNIST --beta 1 --device cuda:3
+python scripts/eval_pw.py --eval_dir new_trained/final_long_noadv/MNIST --device cuda:3
+python scripts/multi_rs.py --eval_dir new_trained/final_long_noadv/MNIST --beta 1 --device cuda:3 --log_name multi_1.txt
+python scripts/multi_rs.py --eval_dir new_trained/final_long_noadv/MNIST --beta 100 --device cuda:3 --log_name multi_100.txt
+
+python scripts/eval_rs.py --eval_dir new_trained/final_long_noadv/CIFAR --beta 1 --device cuda:3
+python scripts/eval_pw.py --eval_dir new_trained/final_long_noadv/CIFAR --device cuda:3
+python scripts/multi_rs.py --eval_dir new_trained/final_long_noadv/CIFAR --beta 1 --device cuda:3 --log_name multi_1.txt
+python scripts/multi_rs.py --eval_dir new_trained/final_long_noadv/CIFAR --beta 100 --device cuda:3 --log_name multi_100.txt
+```
