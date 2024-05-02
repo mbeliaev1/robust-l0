@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Beliaev"
+  given-names: "Mark"
+title: "robust-l0"
+version: 1.0.0
+date-released: 2024-05-02
+url: "https://github.com/mbeliaev1/robust-l0"
