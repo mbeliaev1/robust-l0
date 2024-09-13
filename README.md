@@ -1,5 +1,5 @@
 # Truncation as a Defense for Sparse Attacks
-This directory is supplementary material for our work submitted to IEEE Transactions on Neural Networks and Learning Systems:
+This directory is supplementary material for our work published in IEEE-JSAIT 2024:
 
 [Efficient and Robust Classification for Sparse Attacks](google.com) Mark Beliaev, Payam Delgosha, Hamed Hassani, Ramtin Pedarsani.
 
